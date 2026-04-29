@@ -188,6 +188,10 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
+if [[ -x "${SCRIPT_DIR}/chrome-work-open" ]]; then
+  DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
+  DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/google-chrome:ro")
+fi
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 

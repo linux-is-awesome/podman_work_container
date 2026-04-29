@@ -1,37 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_NAME="work_container.service"
 SYSTEMD_UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
-ALIASES_FILES=("${HOME}/.bashrc" "${HOME}/.zshrc")
-MARKER_START="# >>> work_container aliases >>>"
-MARKER_END="# <<< work_container aliases <<<"
 APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 HOME_CONTAINERS_DIR="${HOME}/.containers"
 SUDOERS_PATH="/etc/sudoers.d/work_container-$(id -un)"
 RUNNER_BIN="/usr/local/bin/work-container-app"
+SF_WRAPPER_BIN="/usr/local/bin/sf"
+SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
 RUNTIME_BASE="/usr/local/lib/work_container"
-
-remove_aliases() {
-  local aliases_file
-  for aliases_file in "${ALIASES_FILES[@]}"; do
-    if [[ ! -f "${aliases_file}" ]]; then
-      continue
-    fi
-    if ! grep -Fq "${MARKER_START}" "${aliases_file}"; then
-      continue
-    fi
-    awk -v s="${MARKER_START}" -v e="${MARKER_END}" '
-      BEGIN {inblock=0}
-      $0==s {inblock=1; next}
-      $0==e {inblock=0; next}
-      !inblock {print}
-    ' "${aliases_file}" > "${aliases_file}.tmp"
-    mv "${aliases_file}.tmp" "${aliases_file}"
-    echo "Removed sf/sfdx aliases from ${aliases_file}"
-  done
-}
 
 remove_desktop_entries() {
   rm -f "${APP_DIR}/google-chrome-work.desktop" "${APP_DIR}/firefox-work.desktop"
@@ -79,29 +57,34 @@ remove_runner_bin() {
   echo "Removed runner ${RUNNER_BIN}"
 }
 
+remove_cli_wrappers() {
+  sudo rm -f "${SF_WRAPPER_BIN}" "${SFDX_WRAPPER_BIN}"
+  echo "Removed CLI wrappers ${SF_WRAPPER_BIN} and ${SFDX_WRAPPER_BIN}"
+}
+
 remove_runtime_bundle() {
   sudo rm -rf "${RUNTIME_BASE}"
   echo "Removed runtime bundle ${RUNTIME_BASE}"
 }
 
 echo "Uninstalling work_container host integration..."
-remove_aliases
 remove_desktop_entries
 remove_systemd_service
 remove_podman_artifacts
 remove_container_archives
 remove_sudoers_rule
 remove_runner_bin
+remove_cli_wrappers
 remove_runtime_bundle
 
 echo
 echo "Uninstall complete."
 echo "- Service removed"
 echo "- Desktop entries removed"
-echo "- sf/sfdx aliases removed from supported shells"
 echo "- Podman container/images removed"
 echo "- Archive folders removed"
 echo "- Passwordless podman sudo rule removed"
 echo "- App runner removed (${RUNNER_BIN})"
+echo "- sf/sfdx wrappers removed (${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN})"
 echo "- Runtime bundle removed (${RUNTIME_BASE})"
 echo "- Local app state preserved (${HOME}/.containers/work_container)"

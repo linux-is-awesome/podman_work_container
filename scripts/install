@@ -11,11 +11,12 @@ CURRENT_USER="$(id -un)"
 CURRENT_UID="$(id -u)"
 CURRENT_GID="$(id -g)"
 CURRENT_HOME="${HOME}"
-ALIASES_FILE="${HOME}/.bashrc"
 PODMAN_PATH="$(command -v podman)"
 SYSTEMCTL_PATH="$(command -v systemctl)"
 SUDOERS_PATH="/etc/sudoers.d/work_container-${CURRENT_USER}"
 SYSTEM_RUNNER_BIN="/usr/local/bin/work-container-app"
+SF_WRAPPER_BIN="/usr/local/bin/sf"
+SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
 RUNTIME_BASE="/usr/local/lib/work_container"
 RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/scripts"
 HOME_STATE_DIR="${CURRENT_HOME}/.containers/work_container"
@@ -49,35 +50,6 @@ sync_home_container_archive() {
   echo "Synced latest archive to ${target_archive}"
 }
 
-install_aliases() {
-  local marker_start="# >>> work_container aliases >>>"
-  local marker_end="# <<< work_container aliases <<<"
-  local alias_block
-  alias_block="$(cat <<EOF
-${marker_start}
-alias sf='${SYSTEM_RUNNER_BIN} sf'
-alias sfdx='${SYSTEM_RUNNER_BIN} sf'
-${marker_end}
-EOF
-)"
-
-  if [[ -f "${ALIASES_FILE}" ]] && grep -Fq "${marker_start}" "${ALIASES_FILE}"; then
-    awk -v s="${marker_start}" -v e="${marker_end}" -v repl="${alias_block}" '
-      BEGIN {inblock=0}
-      $0==s {print repl; inblock=1; next}
-      $0==e {inblock=0; next}
-      !inblock {print}
-    ' "${ALIASES_FILE}" > "${ALIASES_FILE}.tmp"
-    mv "${ALIASES_FILE}.tmp" "${ALIASES_FILE}"
-  else
-    {
-      echo
-      echo "${alias_block}"
-    } >> "${ALIASES_FILE}"
-  fi
-  echo "Installed aliases to ${ALIASES_FILE}"
-}
-
 install_runner_bin() {
   cat <<'EOF' | sudo tee "${SYSTEM_RUNNER_BIN}" >/dev/null
 #!/usr/bin/env bash
@@ -99,8 +71,8 @@ fi
 
 ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null || true)"
 if ! grep -qx 'work_container' <<< "${ps_names}"; then
-  if ! sudo systemctl start "${SERVICE_NAME}"; then
-    echo "Failed to start ${SERVICE_NAME}." >&2
+  if ! sudo systemctl restart "${SERVICE_NAME}"; then
+    echo "Failed to restart ${SERVICE_NAME}." >&2
     exit 1
   fi
 fi
@@ -155,6 +127,34 @@ case "${APP}" in
     ;;
 esac
 
+if [[ "${APP}" == "sf" ]] || [[ "${APP}" == "sfdx" ]]; then
+  has_browser_flag=0
+  for arg in "${CMD[@]}"; do
+    if [[ "${arg}" == "--browser" ]] || [[ "${arg}" == --browser=* ]] || [[ "${arg}" == "-b" ]]; then
+      has_browser_flag=1
+      break
+    fi
+  done
+
+  if [[ "${has_browser_flag}" -eq 0 ]] && [[ "${#CMD[@]}" -ge 2 ]]; then
+    HELP_CMD=("sf")
+    for ((i=1; i<${#CMD[@]}; i++)); do
+      arg="${CMD[$i]}"
+      if [[ "${arg}" == -* ]]; then
+        break
+      fi
+      HELP_CMD+=("${arg}")
+    done
+    HELP_CMD+=(--help)
+
+    if sudo podman exec work_container \
+      setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- \
+      "${HELP_CMD[@]}" 2>/dev/null | awk '/--browser/ {found=1} END {exit found?0:1}'; then
+      CMD+=(--browser chrome)
+    fi
+  fi
+fi
+
 ENV_ARGS=()
 [[ -n "${DISPLAY:-}" ]] && ENV_ARGS+=(--env "DISPLAY=${DISPLAY}")
 [[ -n "${XAUTHORITY:-}" ]] && ENV_ARGS+=(--env "XAUTHORITY=${XAUTHORITY}")
@@ -174,12 +174,28 @@ EOF
   echo "Installed system runner: ${SYSTEM_RUNNER_BIN}"
 }
 
+install_cli_wrappers() {
+  cat <<EOF | sudo tee "${SF_WRAPPER_BIN}" >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${SYSTEM_RUNNER_BIN}" sf "\$@"
+EOF
+  cat <<EOF | sudo tee "${SFDX_WRAPPER_BIN}" >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+exec "${SYSTEM_RUNNER_BIN}" sf "\$@"
+EOF
+  sudo chmod 755 "${SF_WRAPPER_BIN}" "${SFDX_WRAPPER_BIN}"
+  echo "Installed CLI wrappers: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
+}
+
 install_runtime_bundle() {
   sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config" "${RUNTIME_BASE}/certs"
   sudo cp -f "${SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-start"
   sudo cp -f "${SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-stop"
   sudo cp -f "${SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/service-status"
   sudo cp -f "${SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
+  sudo cp -f "${SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open"
   sudo cp -f "${PROJECT_DIR}/config/swanctl.conf.template" "${RUNTIME_BASE}/config/swanctl.conf.template"
   if [[ -f "${PROJECT_DIR}/config/vpn.env" ]]; then
     sudo cp -f "${PROJECT_DIR}/config/vpn.env" "${RUNTIME_BASE}/config/vpn.env"
@@ -187,7 +203,7 @@ install_runtime_bundle() {
   if [[ -d "${PROJECT_DIR}/certs" ]]; then
     sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
   fi
-  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
+  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open"
   echo "Installed runtime bundle: ${RUNTIME_BASE}"
 }
 
@@ -237,7 +253,7 @@ EOF
 
 install_sudoers_rule() {
   local rule
-  rule="${CURRENT_USER} ALL=(root) NOPASSWD: ${PODMAN_PATH}, ${SYSTEMCTL_PATH} start ${SERVICE_NAME}"
+  rule="${CURRENT_USER} ALL=(root) NOPASSWD: ${PODMAN_PATH}, ${SYSTEMCTL_PATH} start ${SERVICE_NAME}, ${SYSTEMCTL_PATH} restart ${SERVICE_NAME}"
   echo "${rule}" | sudo tee "${SUDOERS_PATH}" >/dev/null
   sudo chmod 440 "${SUDOERS_PATH}"
   echo "Installed sudoers rule for passwordless podman: ${SUDOERS_PATH}"
@@ -249,8 +265,8 @@ ensure_built_image
 sync_home_container_archive
 install_runtime_bundle
 install_runner_bin
+install_cli_wrappers
 WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${SCRIPTS_DIR}/install-desktop"
-install_aliases
 install_sudoers_rule
 install_systemd_service
 
@@ -259,6 +275,6 @@ echo "Install complete."
 echo "- Desktop entries updated"
 echo "- Runtime bundle installed: ${RUNTIME_BASE}"
 echo "- App runner installed: ${SYSTEM_RUNNER_BIN}"
-echo "- sf/sfdx aliases installed (open new shell or run: source ~/.bashrc)"
-echo "- Passwordless sudo for podman/systemctl-start installed (${SUDOERS_PATH})"
+echo "- sf/sfdx wrappers installed: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
+echo "- Passwordless sudo for podman/systemctl-start/restart installed (${SUDOERS_PATH})"
 echo "- Service installed (starts on first app/tool launch): ${SERVICE_NAME}"

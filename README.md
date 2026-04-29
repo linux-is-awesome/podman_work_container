@@ -35,11 +35,11 @@ This command will:
 - build image if no build archive exists yet
 - copy latest build archive to `~/.containers` (old versions there are removed)
 - install/update desktop entries in `~/.local/share/applications`
-- install `sf`/`sfdx` aliases in `~/.bashrc` to use container CLI
+- install `sf`/`sfdx` wrapper binaries in `/usr/local/bin` to use container CLI
 - install a sudoers rule for passwordless `podman` (required for desktop launchers and `./start app ...`)
 - install/update system service `work_container.service` (on-demand start via app runner)
 
-After first install, open a new shell (or run `source ~/.bashrc`) to use aliases.
+After first install, `sf`/`sfdx` are available as system binaries.
 
 To remove integration:
 

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Used as BROWSER for container tools: one executable path (xdg-open / tools often
+# ignore multi-word BROWSER=...). Force full Work identity and Wayland flags.
+exec google-chrome-stable \
+  --enable-features=UseOzonePlatform \
+  --ozone-platform-hint=auto \
+  --ozone-platform=wayland \
+  --class=Google-chrome-work \
+  --name=Google-chrome-work \
+  "$@"
