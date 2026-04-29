@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${PROJECT_DIR}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
+  "${SCRIPT_DIR}/sync-certs" >/dev/null
+fi
+
+IMAGE_REPO="work_container"
+CONTAINER_NAME="work_container"
+CONFIG_DIR="${PROJECT_DIR}/config"
+ARCHIVE_DIR="${PROJECT_DIR}/containers"
+CERTS_DIR="${PROJECT_DIR}/certs"
+REQUESTED_VERSION="${1:-}"
+PODMAN_BIN_CMD="${WORK_CONTAINER_PODMAN_BIN:-sudo podman}"
+read -r -a PODMAN_BIN <<< "${PODMAN_BIN_CMD}"
+HOST_HOME="${WORK_CONTAINER_HOST_HOME:-${HOME}}"
+HOST_UID="${WORK_CONTAINER_HOST_UID:-$(id -u)}"
+HOST_GID="${WORK_CONTAINER_HOST_GID:-$(id -g)}"
+HOST_RUNTIME_DIR="${WORK_CONTAINER_HOST_RUNTIME_DIR:-/run/user/${HOST_UID}}"
+ARCHIVE_DIR="${WORK_CONTAINER_ARCHIVE_DIR:-${ARCHIVE_DIR}}"
+HOST_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+WAIT_FOR_GUI="${WORK_CONTAINER_WAIT_FOR_GUI:-0}"
+WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-180}"
+WAIT_FOR_PAYLOAD="${WORK_CONTAINER_WAIT_FOR_PAYLOAD:-1}"
+WAIT_FOR_PAYLOAD_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_PAYLOAD_TIMEOUT:-180}"
+
+wait_for_gui_readiness() {
+  local waited=0
+  local step=2
+  local wayland_sock="${HOST_RUNTIME_DIR}/wayland-0"
+  local pulse_sock="${HOST_RUNTIME_DIR}/pulse/native"
+
+  if [[ "${WAIT_FOR_GUI}" != "1" ]]; then
+    return
+  fi
+
+  echo "Waiting for graphical session resources (Wayland/Pulse/GPU)..."
+  while (( waited < WAIT_FOR_GUI_TIMEOUT )); do
+    if [[ -S "${wayland_sock}" ]] && [[ -S "${pulse_sock}" ]] && [[ -e /dev/dri/renderD128 ]]; then
+      echo "Graphical session resources detected."
+      return
+    fi
+    sleep "${step}"
+    waited=$((waited + step))
+  done
+
+  echo "Graphical resources not fully ready after ${WAIT_FOR_GUI_TIMEOUT}s; continuing startup."
+}
+
+wait_for_payload() {
+  local waited=0
+  local step=2
+  local latest_archive=""
+
+  if [[ "${WAIT_FOR_PAYLOAD}" != "1" ]]; then
+    return
+  fi
+
+  echo "Waiting for container payload in ${ARCHIVE_DIR}..."
+  while (( waited < WAIT_FOR_PAYLOAD_TIMEOUT )); do
+    if [[ -d "${ARCHIVE_DIR}" ]]; then
+      latest_archive="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+      if [[ -n "${latest_archive}" ]]; then
+        echo "Container payload detected."
+        return
+      fi
+    fi
+    sleep "${step}"
+    waited=$((waited + step))
+  done
+
+  echo "No payload detected after ${WAIT_FOR_PAYLOAD_TIMEOUT}s; skipping container start."
+}
+
+ensure_host_runtime_dir() {
+  if [[ ! -d "${HOST_RUNTIME_DIR}" ]]; then
+    mkdir -p "${HOST_RUNTIME_DIR}"
+  fi
+  chown "${HOST_UID}:${HOST_GID}" "${HOST_RUNTIME_DIR}"
+  chmod 700 "${HOST_RUNTIME_DIR}"
+}
+
+print_host_runtime_status() {
+  local wayland_sock="${HOST_RUNTIME_DIR}/${HOST_WAYLAND_DISPLAY:-}"
+  local pulse_sock="${HOST_RUNTIME_DIR}/pulse/native"
+  local lines=()
+  if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
+    lines+=("  X11: OK (DISPLAY=${DISPLAY})")
+  else
+    lines+=("  X11: missing (DISPLAY or /tmp/.X11-unix)")
+  fi
+
+  if [[ -n "${HOST_WAYLAND_DISPLAY}" ]] && [[ -S "${wayland_sock}" ]]; then
+    lines+=("  Wayland: OK (${wayland_sock})")
+  elif [[ -S "${HOST_RUNTIME_DIR}/wayland-0" ]]; then
+    lines+=("  Wayland: OK (${HOST_RUNTIME_DIR}/wayland-0, auto-detected)")
+  else
+    lines+=("  Wayland: missing (${wayland_sock})")
+  fi
+
+  if [[ -e /dev/dri/renderD128 ]]; then
+    lines+=("  GPU render node: OK (/dev/dri/renderD128)")
+  else
+    lines+=("  GPU render node: missing (/dev/dri/renderD128)")
+  fi
+
+  if [[ -d /dev/snd ]]; then
+    lines+=("  ALSA device: OK (/dev/snd)")
+  else
+    lines+=("  ALSA device: missing (/dev/snd)")
+  fi
+
+  if [[ -S "${pulse_sock}" ]]; then
+    lines+=("  PulseAudio socket: OK (${pulse_sock})")
+  else
+    lines+=("  PulseAudio socket: missing (${pulse_sock})")
+  fi
+
+  printf '%s\n' "${lines[@]}"
+}
+
+if [[ ! -f "${CONFIG_DIR}/vpn.env" ]]; then
+  echo "Missing ${CONFIG_DIR}/vpn.env. Run ./start configure-vpn first." >&2
+  exit 1
+fi
+if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
+  echo "Missing ${CONFIG_DIR}/swanctl.conf.template" >&2
+  exit 1
+fi
+
+wait_for_payload
+
+if [[ ! -d "${ARCHIVE_DIR}" ]]; then
+  echo "Archive directory not found: ${ARCHIVE_DIR}"
+  echo "No payload installed; skipping container start."
+  exit 0
+fi
+
+LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+if [[ -z "${LATEST_ARCHIVE}" ]]; then
+  echo "No container archives found in ${ARCHIVE_DIR}/."
+  echo "No payload installed; skipping container start."
+  exit 0
+fi
+
+if [[ -n "${REQUESTED_VERSION}" ]]; then
+  ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${REQUESTED_VERSION}.oci"
+  if [[ ! -f "${ARCHIVE_PATH}" ]]; then
+    echo "Build version not found: ${REQUESTED_VERSION}" >&2
+    exit 1
+  fi
+else
+  ARCHIVE_PATH="${LATEST_ARCHIVE}"
+fi
+
+BUILD_VERSION="$(basename "${ARCHIVE_PATH}")"
+BUILD_VERSION="${BUILD_VERSION#work_container-}"
+BUILD_VERSION="${BUILD_VERSION%.oci}"
+IMAGE_NAME="${IMAGE_REPO}:${BUILD_VERSION}"
+
+echo "Loading image from ${ARCHIVE_PATH}..."
+"${PODMAN_BIN[@]}" load -i "${ARCHIVE_PATH}" >/dev/null
+
+wait_for_gui_readiness
+ensure_host_runtime_dir
+if [[ -z "${HOST_WAYLAND_DISPLAY}" ]] && [[ -S "${HOST_RUNTIME_DIR}/wayland-0" ]]; then
+  HOST_WAYLAND_DISPLAY="wayland-0"
+fi
+HOST_STATUS="$(print_host_runtime_status)"
+
+DISPLAY_ARGS=()
+if [[ -d /tmp/.X11-unix ]]; then
+  DISPLAY_ARGS+=("-v" "/tmp/.X11-unix:/tmp/.X11-unix:rw")
+fi
+if [[ -d "${HOST_RUNTIME_DIR}" ]]; then
+  DISPLAY_ARGS+=("-v" "${HOST_RUNTIME_DIR}:${HOST_RUNTIME_DIR}:rw")
+fi
+if [[ -d /dev/dri ]]; then
+  DISPLAY_ARGS+=("--device" "/dev/dri:/dev/dri:rwm")
+fi
+if [[ -d /dev/snd ]]; then
+  DISPLAY_ARGS+=("--device" "/dev/snd:/dev/snd:rwm")
+fi
+if [[ -S /run/dbus/system_bus_socket ]]; then
+  DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
+fi
+
+"${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
+"${PODMAN_BIN[@]}" run -d --name "${CONTAINER_NAME}" --hostname "${CONTAINER_NAME}" \
+  --network bridge \
+  --group-add keep-groups \
+  --device-cgroup-rule "c 226:* rwm" \
+  --device-cgroup-rule "c 116:* rwm" \
+  --shm-size=1g \
+  --cap-add NET_ADMIN \
+  --cap-add NET_RAW \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --security-opt apparmor=unconfined \
+  -v "${CONFIG_DIR}:/config:ro" \
+  -v "${CERTS_DIR}:/project-certs:ro" \
+  -v "/etc/passwd:/etc/passwd:ro" \
+  -v "/etc/group:/etc/group:ro" \
+  -v "${HOST_HOME}:${HOST_HOME}:rw" \
+  -e "HOME=${HOST_HOME}" \
+  -w "${HOST_HOME}" \
+  -e "XDG_RUNTIME_DIR=${HOST_RUNTIME_DIR}" \
+  -e "WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}" \
+  -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
+  -e "PULSE_SERVER=unix:${HOST_RUNTIME_DIR}/pulse/native" \
+  "${DISPLAY_ARGS[@]}" \
+  "${IMAGE_NAME}" sleep infinity >/dev/null
+
+PUBLIC_IP_LINE=""
+for _ in $(seq 1 20); do
+  PUBLIC_IP_LINE="$("${PODMAN_BIN[@]}" logs "${CONTAINER_NAME}" 2>/dev/null | awk '/Public egress IP:/ {line=$0} END {print line}')"
+  if [[ -n "${PUBLIC_IP_LINE}" ]]; then
+    break
+  fi
+  sleep 1
+done
+
+echo "Service started."
+if [[ -n "${PUBLIC_IP_LINE}" ]]; then
+  echo "${PUBLIC_IP_LINE}"
+else
+  echo "[work_container] Public egress IP: unavailable"
+fi
+echo "[start service-start] Host runtime status:"
+echo "${HOST_STATUS}"
+echo "Use ./start service-status to check logs/state."

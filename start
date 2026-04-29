@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="${PROJECT_DIR}/scripts"
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_CYAN=$'\033[36m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_MAGENTA=$'\033[35m'
+else
+  C_RESET=""
+  C_BOLD=""
+  C_CYAN=""
+  C_GREEN=""
+  C_YELLOW=""
+  C_MAGENTA=""
+fi
+
+run_cmd() {
+  local cmd="$1"
+  shift || true
+  "${SCRIPTS_DIR}/${cmd}" "$@"
+}
+
+run_app() {
+  local app="${1:-}"
+  shift || true
+  case "${app}" in
+    google-chrome|chrome)
+      run_cmd exec-in google-chrome-stable "$@"
+      ;;
+    firefox)
+      run_cmd exec-in firefox-esr "$@"
+      ;;
+    sf|sfdx)
+      run_cmd exec-in sf "$@"
+      ;;
+    *)
+      echo "Unknown app: ${app}" >&2
+      echo "Supported apps: google-chrome, firefox, sf" >&2
+      exit 1
+      ;;
+  esac
+}
+
+print_help() {
+  echo "${C_BOLD}${C_CYAN}work_container launcher${C_RESET}"
+  echo
+  echo "${C_BOLD}Usage${C_RESET}"
+  echo "  ./start <command> [args...]"
+  echo "  ./start app <google-chrome|firefox|sf> [args...]"
+  echo
+  echo "${C_BOLD}Commands${C_RESET}"
+  echo "  ${C_GREEN}build${C_RESET}"
+  echo "  ${C_GREEN}run${C_RESET} [version] [-- command...]"
+  echo "  ${C_GREEN}update${C_RESET}"
+  echo "  ${C_GREEN}sync-certs${C_RESET}"
+  echo "  ${C_GREEN}install${C_RESET}"
+  echo "  ${C_GREEN}uninstall${C_RESET}"
+  echo "  ${C_GREEN}configure-vpn${C_RESET}"
+  echo "  ${C_GREEN}start-service${C_RESET} [version]  (alias for service-start)"
+  echo "  ${C_GREEN}service-start${C_RESET} [version]"
+  echo "  ${C_GREEN}service-stop${C_RESET}"
+  echo "  ${C_GREEN}service-status${C_RESET}"
+  echo "  ${C_GREEN}exec-in${C_RESET} <command> [args...]"
+  echo "  ${C_GREEN}install-desktop${C_RESET}"
+  echo "  ${C_MAGENTA}app${C_RESET} <google-chrome|firefox|sf> [args...]"
+  echo
+  echo "${C_BOLD}Examples${C_RESET}"
+  echo "  ./start app google-chrome"
+  echo "  ./start app firefox"
+  echo "  ./start app sf --version"
+}
+
+pause() {
+  echo
+  read -r -p "Press Enter to continue..."
+}
+
+draw_header() {
+  clear
+  echo "${C_CYAN}${C_BOLD}╔══════════════════════════════════════════════════════════════╗${C_RESET}"
+  echo "${C_CYAN}${C_BOLD}║${C_RESET} ${C_BOLD}work_container control center${C_RESET}                               ${C_CYAN}${C_BOLD}║${C_RESET}"
+  echo "${C_CYAN}${C_BOLD}╚══════════════════════════════════════════════════════════════╝${C_RESET}"
+  echo "${C_YELLOW}Project:${C_RESET} ${PROJECT_DIR}"
+  echo
+}
+
+interactive_menu() {
+  while true; do
+    draw_header
+    cat <<EOF
+${C_BOLD}${C_GREEN}Core${C_RESET}
+  [1] Build image
+  [2] Run container shell
+  [3] Update image packages/tools
+  [4] Sync host certs to project
+  [5] Install/update system integration
+  [6] Uninstall system integration
+  [7] Configure VPN
+
+${C_BOLD}${C_GREEN}Service${C_RESET}
+  [8] Start service
+  [9] Stop service
+  [10] Service status/logs
+
+${C_BOLD}${C_MAGENTA}Apps${C_RESET}
+  [11] Open Google Chrome
+  [12] Open Firefox
+  [13] Run Salesforce CLI (sf)
+  [14] Run custom command in service (exec-in)
+
+${C_BOLD}${C_GREEN}Desktop${C_RESET}
+  [15] Install desktop launchers
+
+${C_BOLD}${C_CYAN}Other${C_RESET}
+  [h] Help
+  [q] Quit
+EOF
+    echo
+    read -r -p "Choose option: " choice
+    case "${choice}" in
+      1) run_cmd build; pause ;;
+      2) run_cmd run; pause ;;
+      3) run_cmd update; pause ;;
+      4) run_cmd sync-certs; pause ;;
+      5)
+        run_cmd install
+        pause
+        ;;
+      6) run_cmd uninstall; pause ;;
+      7) run_cmd configure-vpn; pause ;;
+      8)
+        read -r -p "Optional build version (blank=latest): " ver
+        if [[ -n "${ver}" ]]; then run_cmd service-start "${ver}"; else run_cmd service-start; fi
+        pause
+        ;;
+      9) run_cmd service-stop; pause ;;
+      10) run_cmd service-status; pause ;;
+      11) run_app google-chrome; pause ;;
+      12) run_app firefox; pause ;;
+      13)
+        read -r -p "sf args (blank=--version): " sf_args
+        if [[ -n "${sf_args}" ]]; then
+          # shellcheck disable=SC2206
+          args=( ${sf_args} )
+          run_app sf "${args[@]}"
+        else
+          run_app sf --version
+        fi
+        pause
+        ;;
+      14)
+        read -r -p "Command to run inside service: " cmdline
+        if [[ -n "${cmdline}" ]]; then
+          # shellcheck disable=SC2206
+          args=( ${cmdline} )
+          run_cmd exec-in "${args[@]}"
+        fi
+        pause
+        ;;
+      15) run_cmd install-desktop; pause ;;
+      h|H) draw_header; print_help; pause ;;
+      q|Q) exit 0 ;;
+      *) echo "${C_YELLOW}Invalid option.${C_RESET}"; sleep 1 ;;
+    esac
+  done
+}
+
+if [[ $# -eq 0 ]]; then
+  interactive_menu
+fi
+
+case "$1" in
+  help|-h|--help)
+    print_help
+    ;;
+  build|run|update|sync-certs|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in|install-desktop)
+    cmd="$1"
+    shift
+    run_cmd "${cmd}" "$@"
+    ;;
+  start-service)
+    shift
+    run_cmd service-start "$@"
+    ;;
+  app)
+    shift
+    run_app "${1:-}" "${@:2}"
+    ;;
+  *)
+    echo "Unknown command: $1" >&2
+    print_help >&2
+    exit 1
+    ;;
+esac

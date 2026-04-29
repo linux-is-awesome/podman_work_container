@@ -4,6 +4,7 @@ set -euo pipefail
 CONFIG_DIR="${WORK_CONTAINER_CONFIG_DIR:-/config}"
 VPN_ENV_FILE="${WORK_CONTAINER_VPN_ENV_FILE:-${CONFIG_DIR}/vpn.env}"
 VPN_TEMPLATE_FILE="${WORK_CONTAINER_SWANCTL_TEMPLATE:-${CONFIG_DIR}/swanctl.conf.template}"
+PROJECT_CERTS_DIR="${WORK_CONTAINER_PROJECT_CERTS_DIR:-/project-certs}"
 
 if [[ -f "${VPN_ENV_FILE}" ]]; then
   # shellcheck disable=SC1090
@@ -45,12 +46,17 @@ if [[ -z "${VPN_SERVER_ADDR}" ]]; then
 fi
 
 mkdir -p /etc/swanctl
-# envsubst only reads exported environment variables.
 export VPN_CONN VPN_CHILD VPN_SERVER VPN_SERVER_ADDR VPN_REMOTE_ID VPN_USERNAME VPN_PASSWORD VPN_LOCAL_ID VPN_IKE_PROPOSAL VPN_ESP_PROPOSAL
 envsubst < "${VPN_TEMPLATE_FILE}" > /etc/swanctl/swanctl.conf
 
-# Make system CAs available to swanctl/charon certificate validation.
 mkdir -p /etc/swanctl/x509ca
+# Project certs first (portable snapshot + custom additions), then live host certs.
+if compgen -G "${PROJECT_CERTS_DIR}/host/*.pem" >/dev/null; then
+  cp -f "${PROJECT_CERTS_DIR}/host/"*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
+fi
+if compgen -G "${PROJECT_CERTS_DIR}/custom/*.pem" >/dev/null; then
+  cp -f "${PROJECT_CERTS_DIR}/custom/"*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
+fi
 if compgen -G "/etc/ssl/certs/*.pem" >/dev/null; then
   cp -f /etc/ssl/certs/*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
 fi
@@ -63,13 +69,10 @@ iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT DROP
 
-# Baseline: loopback + established traffic.
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# Only allow IKE/NAT-T to VPN gateway before tunnel is up.
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 4500 -j ACCEPT
 
@@ -81,7 +84,6 @@ echo "[work_container] Loading and initiating ${VPN_CONN}..."
 "${SWANCTL_BIN}" --load-all
 "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}"
 
-# Wait for tunnel.
 for _ in $(seq 1 20); do
   if "${SWANCTL_BIN}" --list-sas | grep -q "${VPN_CONN}"; then
     break
@@ -94,7 +96,6 @@ if ! "${SWANCTL_BIN}" --list-sas | grep -q "${VPN_CONN}"; then
   exit 1
 fi
 
-# Keep only VPN-protected traffic plus VPN maintenance packets.
 iptables -A OUTPUT -m policy --pol ipsec --dir out -j ACCEPT
 iptables -A INPUT -m policy --pol ipsec --dir in -j ACCEPT
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
@@ -105,6 +106,37 @@ if [[ -n "${PUBLIC_IP}" ]]; then
   echo "[work_container] Public egress IP: ${PUBLIC_IP}"
 else
   echo "[work_container] Public egress IP: unavailable"
+fi
+
+echo "[work_container] Runtime status:"
+if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
+  echo "  X11: OK (DISPLAY=${DISPLAY})"
+else
+  echo "  X11: missing (DISPLAY or /tmp/.X11-unix)"
+fi
+
+if [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -n "${XDG_RUNTIME_DIR:-}" ]] && [[ -S "${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}" ]]; then
+  echo "  Wayland: OK (${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY})"
+else
+  echo "  Wayland: missing (WAYLAND_DISPLAY/XDG_RUNTIME_DIR/socket)"
+fi
+
+if [[ -e /dev/dri/renderD128 ]]; then
+  echo "  GPU render node: OK (/dev/dri/renderD128)"
+else
+  echo "  GPU render node: missing (/dev/dri/renderD128)"
+fi
+
+if [[ -d /dev/snd ]]; then
+  echo "  ALSA device: OK (/dev/snd)"
+else
+  echo "  ALSA device: missing (/dev/snd)"
+fi
+
+if [[ -n "${PULSE_SERVER:-}" ]]; then
+  echo "  PulseAudio env: OK (${PULSE_SERVER})"
+else
+  echo "  PulseAudio env: not set"
 fi
 
 echo "[work_container] VPN is up. Starting command: $*"

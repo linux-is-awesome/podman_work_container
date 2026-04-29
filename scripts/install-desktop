@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_DIR="${PROJECT_DIR}/desktop"
 TARGET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+RUNNER_BIN="${WORK_CONTAINER_RUNNER_BIN:-/usr/local/bin/work-container-app}"
 
 mkdir -p "${TARGET_DIR}"
 
@@ -14,7 +15,7 @@ for file in google-chrome-work.desktop firefox-work.desktop; do
     echo "Missing desktop file: ${src}" >&2
     exit 1
   fi
-  sed "s|__PROJECT_DIR__|${PROJECT_DIR}|g" "${src}" > "${dst}"
+  sed -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" -e "s|__RUNNER_BIN__|${RUNNER_BIN}|g" "${src}" > "${dst}"
   chmod 644 "${dst}"
   echo "Installed ${dst}"
 done

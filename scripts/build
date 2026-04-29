@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${PROJECT_DIR}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
+  "${SCRIPT_DIR}/sync-certs" >/dev/null
+fi
+
 IMAGE_REPO="work_container"
-ARCHIVE_DIR="containers"
+ARCHIVE_DIR="${PROJECT_DIR}/containers"
 BUILD_VERSION="$(date +%Y%m%d-%H%M%S)"
 IMAGE_VERSION_TAG="${IMAGE_REPO}:${BUILD_VERSION}"
 IMAGE_LATEST_TAG="${IMAGE_REPO}:latest"
@@ -10,7 +18,7 @@ ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${BUILD_VERSION}.oci"
 PODMAN_BIN=(sudo podman)
 
 mkdir -p "${ARCHIVE_DIR}"
-"${PODMAN_BIN[@]}" build -t "${IMAGE_VERSION_TAG}" -f Containerfile .
+"${PODMAN_BIN[@]}" build -t "${IMAGE_VERSION_TAG}" -f "${PROJECT_DIR}/Containerfile" "${PROJECT_DIR}"
 "${PODMAN_BIN[@]}" tag "${IMAGE_VERSION_TAG}" "${IMAGE_LATEST_TAG}"
 "${PODMAN_BIN[@]}" save --format oci-archive -o "${ARCHIVE_PATH}" "${IMAGE_VERSION_TAG}"
 

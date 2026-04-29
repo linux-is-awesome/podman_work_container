@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${PROJECT_DIR}"
+
 IMAGE_REPO="work_container"
 TEMP_CONTAINER="work_container_update"
-ARCHIVE_DIR="containers"
+ARCHIVE_DIR="${PROJECT_DIR}/containers"
 NEW_VERSION="$(date +%Y%m%d-%H%M%S)"
 NEW_IMAGE_TAG="${IMAGE_REPO}:${NEW_VERSION}"
 LATEST_IMAGE_TAG="${IMAGE_REPO}:latest"
@@ -13,7 +16,7 @@ mkdir -p "${ARCHIVE_DIR}"
 
 LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
 if [[ -z "${LATEST_ARCHIVE}" ]]; then
-  echo "No build archives found in ${ARCHIVE_DIR}/. Run ./build first." >&2
+  echo "No build archives found in ${ARCHIVE_DIR}/. Run ./start build first." >&2
   exit 1
 fi
 
@@ -31,7 +34,13 @@ echo "Removing previous temp container (if any): ${TEMP_CONTAINER}"
 
 echo "Updating packages inside ${SOURCE_IMAGE_TAG}..."
 "${PODMAN_BIN[@]}" run --name "${TEMP_CONTAINER}" -it "${SOURCE_IMAGE_TAG}" bash -lc \
-  "apt-get update && apt-get -y dist-upgrade && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*"
+  "apt-get update && apt-get -y dist-upgrade && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/* \
+  && curl -fsSL https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-linux-x64.tar.xz -o /tmp/sf.tar.xz \
+  && rm -rf /opt/sf \
+  && mkdir -p /opt/sf \
+  && tar -xJf /tmp/sf.tar.xz -C /opt/sf --strip-components=1 \
+  && ln -sf /opt/sf/bin/sf /usr/local/bin/sf \
+  && rm -f /tmp/sf.tar.xz"
 
 echo "Committing updated container to image: ${NEW_IMAGE_TAG}"
 "${PODMAN_BIN[@]}" commit "${TEMP_CONTAINER}" "${NEW_IMAGE_TAG}" >/dev/null
@@ -45,5 +54,5 @@ echo "Removing temp container: ${TEMP_CONTAINER}"
 
 echo "Done."
 echo "Created build version: ${NEW_VERSION}"
-echo "Run latest with: ./run"
-echo "Run this exact version with: ./run ${NEW_VERSION}"
+echo "Run latest with: ./start run"
+echo "Run this exact version with: ./start run ${NEW_VERSION}"

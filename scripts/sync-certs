@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HOST_CERT_SRC="/etc/ssl/certs"
+TARGET_DIR="${PROJECT_DIR}/certs/host"
+
+mkdir -p "${TARGET_DIR}"
+rm -f "${TARGET_DIR}"/*.pem
+
+if compgen -G "${HOST_CERT_SRC}/*.pem" >/dev/null; then
+  cp -f "${HOST_CERT_SRC}"/*.pem "${TARGET_DIR}/"
+  COUNT="$(ls -1 "${TARGET_DIR}"/*.pem 2>/dev/null | wc -l | tr -d ' ')"
+  echo "Synced ${COUNT} host cert(s) to ${TARGET_DIR}"
+else
+  echo "No PEM certs found in ${HOST_CERT_SRC}"
+fi
+
+echo "You can also place additional custom certs in:"
+echo "  ${PROJECT_DIR}/certs/custom"

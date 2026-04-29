@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPTS_DIR="${PROJECT_DIR}/scripts"
+CONTAINERS_DIR="${PROJECT_DIR}/containers"
+HOME_CONTAINERS_DIR="${HOME}/.containers"
+SERVICE_NAME="work_container.service"
+SYSTEMD_UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
+CURRENT_USER="$(id -un)"
+CURRENT_UID="$(id -u)"
+CURRENT_GID="$(id -g)"
+CURRENT_HOME="${HOME}"
+ALIASES_FILE="${HOME}/.bashrc"
+PODMAN_PATH="$(command -v podman)"
+SYSTEMCTL_PATH="$(command -v systemctl)"
+SUDOERS_PATH="/etc/sudoers.d/work_container-${CURRENT_USER}"
+SYSTEM_RUNNER_BIN="/usr/local/bin/work-container-app"
+RUNTIME_BASE="/usr/local/lib/work_container"
+RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/scripts"
+HOME_STATE_DIR="${CURRENT_HOME}/.containers/work_container"
+HOME_STATE_APP_DIR="${HOME_STATE_DIR}/home"
+
+ensure_user_dirs() {
+  mkdir -p "${CONTAINERS_DIR}" "${HOME_CONTAINERS_DIR}"
+  mkdir -p "${HOME_STATE_APP_DIR}/.config" "${HOME_STATE_APP_DIR}/.cache" "${HOME_STATE_APP_DIR}/.local/share"
+}
+
+ensure_built_image() {
+  local latest_archive
+  latest_archive="$(ls -1 "${CONTAINERS_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+  if [[ -z "${latest_archive}" ]]; then
+    echo "No built container archive found. Building now..."
+    "${SCRIPTS_DIR}/build"
+  fi
+}
+
+sync_home_container_archive() {
+  local latest_archive target_archive
+  mkdir -p "${HOME_CONTAINERS_DIR}"
+  latest_archive="$(ls -1 "${CONTAINERS_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+  if [[ -z "${latest_archive}" ]]; then
+    echo "No source archive found in ${CONTAINERS_DIR}" >&2
+    exit 1
+  fi
+  target_archive="${HOME_CONTAINERS_DIR}/$(basename "${latest_archive}")"
+  rm -f "${HOME_CONTAINERS_DIR}"/work_container-*.oci
+  cp -f "${latest_archive}" "${target_archive}"
+  echo "Synced latest archive to ${target_archive}"
+}
+
+install_aliases() {
+  local marker_start="# >>> work_container aliases >>>"
+  local marker_end="# <<< work_container aliases <<<"
+  local alias_block
+  alias_block="$(cat <<EOF
+${marker_start}
+alias sf='${SYSTEM_RUNNER_BIN} sf'
+alias sfdx='${SYSTEM_RUNNER_BIN} sf'
+${marker_end}
+EOF
+)"
+
+  if [[ -f "${ALIASES_FILE}" ]] && grep -Fq "${marker_start}" "${ALIASES_FILE}"; then
+    awk -v s="${marker_start}" -v e="${marker_end}" -v repl="${alias_block}" '
+      BEGIN {inblock=0}
+      $0==s {print repl; inblock=1; next}
+      $0==e {inblock=0; next}
+      !inblock {print}
+    ' "${ALIASES_FILE}" > "${ALIASES_FILE}.tmp"
+    mv "${ALIASES_FILE}.tmp" "${ALIASES_FILE}"
+  else
+    {
+      echo
+      echo "${alias_block}"
+    } >> "${ALIASES_FILE}"
+  fi
+  echo "Installed aliases to ${ALIASES_FILE}"
+}
+
+install_runner_bin() {
+  cat <<'EOF' | sudo tee "${SYSTEM_RUNNER_BIN}" >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: work-container-app <google-chrome|firefox|sf> [args...]" >&2
+  exit 1
+fi
+
+SERVICE_NAME="work_container.service"
+APP="${1}"
+shift || true
+
+if ! sudo podman ps --format '{{.Names}}' >/dev/null 2>&1; then
+  echo "Cannot access root podman. Run: sudo -v" >&2
+  exit 1
+fi
+
+ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null || true)"
+if ! grep -qx 'work_container' <<< "${ps_names}"; then
+  if ! sudo systemctl start "${SERVICE_NAME}"; then
+    echo "Failed to start ${SERVICE_NAME}." >&2
+    exit 1
+  fi
+fi
+
+for _ in $(seq 1 30); do
+  ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null || true)"
+  if grep -qx 'work_container' <<< "${ps_names}"; then
+    break
+  fi
+  sleep 1
+done
+if ! grep -qx 'work_container' <<< "${ps_names}"; then
+  echo "work_container container is not running after service start." >&2
+  exit 1
+fi
+
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+HOST_GROUPS_CSV="$(id -G | tr ' ' ',')"
+GPU_GIDS=()
+if [[ -e /dev/dri/renderD128 ]]; then
+  GPU_GIDS+=("$(stat -c '%g' /dev/dri/renderD128)")
+fi
+if [[ -e /dev/dri/card0 ]]; then
+  GPU_GIDS+=("$(stat -c '%g' /dev/dri/card0)")
+fi
+for gid in "${GPU_GIDS[@]}"; do
+  if [[ -n "${gid}" ]] && [[ ",${HOST_GROUPS_CSV}," != *",${gid},"* ]]; then
+    HOST_GROUPS_CSV="${HOST_GROUPS_CSV},${gid}"
+  fi
+done
+
+WORK_HOME="${HOME}/.containers/work_container"
+APP_HOME="${WORK_HOME}/home"
+mkdir -p "${APP_HOME}/.config" "${APP_HOME}/.cache" "${APP_HOME}/.local/share"
+
+case "${APP}" in
+  google-chrome|chrome)
+    CMD=(google-chrome-stable "$@")
+    CMD+=("--enable-features=UseOzonePlatform" "--ozone-platform-hint=auto" "--ozone-platform=wayland" "--class=Google-chrome-work" "--name=Google-chrome-work")
+    ;;
+  firefox)
+    CMD=(firefox-esr "$@")
+    CMD+=("--class" "Firefox-work" "--name" "Firefox-work")
+    ;;
+  sf|sfdx)
+    CMD=(sf "$@")
+    ;;
+  *)
+    echo "Unknown app: ${APP}" >&2
+    exit 1
+    ;;
+esac
+
+ENV_ARGS=()
+[[ -n "${DISPLAY:-}" ]] && ENV_ARGS+=(--env "DISPLAY=${DISPLAY}")
+[[ -n "${XAUTHORITY:-}" ]] && ENV_ARGS+=(--env "XAUTHORITY=${XAUTHORITY}")
+[[ -n "${WAYLAND_DISPLAY:-}" ]] && ENV_ARGS+=(--env "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+[[ -n "${XDG_RUNTIME_DIR:-}" ]] && ENV_ARGS+=(--env "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}")
+[[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && ENV_ARGS+=(--env "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}")
+[[ -n "${PULSE_SERVER:-}" ]] && ENV_ARGS+=(--env "PULSE_SERVER=${PULSE_SERVER}")
+[[ -n "${PIPEWIRE_REMOTE:-}" ]] && ENV_ARGS+=(--env "PIPEWIRE_REMOTE=${PIPEWIRE_REMOTE}")
+[[ -n "${LIBVA_DRIVER_NAME:-}" ]] && ENV_ARGS+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")
+[[ -n "${LIBVA_DRIVERS_PATH:-}" ]] && ENV_ARGS+=(--env "LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH}")
+[[ -n "${VDPAU_DRIVER:-}" ]] && ENV_ARGS+=(--env "VDPAU_DRIVER=${VDPAU_DRIVER}")
+ENV_ARGS+=(--env "HOME=${APP_HOME}" --env "XDG_CONFIG_HOME=${APP_HOME}/.config" --env "XDG_CACHE_HOME=${APP_HOME}/.cache" --env "XDG_DATA_HOME=${APP_HOME}/.local/share")
+
+sudo podman exec "${ENV_ARGS[@]}" work_container setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
+EOF
+  sudo chmod 755 "${SYSTEM_RUNNER_BIN}"
+  echo "Installed system runner: ${SYSTEM_RUNNER_BIN}"
+}
+
+install_runtime_bundle() {
+  sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config" "${RUNTIME_BASE}/certs"
+  sudo cp -f "${SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-start"
+  sudo cp -f "${SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-stop"
+  sudo cp -f "${SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/service-status"
+  sudo cp -f "${SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
+  sudo cp -f "${PROJECT_DIR}/config/swanctl.conf.template" "${RUNTIME_BASE}/config/swanctl.conf.template"
+  if [[ -f "${PROJECT_DIR}/config/vpn.env" ]]; then
+    sudo cp -f "${PROJECT_DIR}/config/vpn.env" "${RUNTIME_BASE}/config/vpn.env"
+  fi
+  if [[ -d "${PROJECT_DIR}/certs" ]]; then
+    sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
+  fi
+  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
+  echo "Installed runtime bundle: ${RUNTIME_BASE}"
+}
+
+install_systemd_service() {
+  local unit_content
+  unit_content="$(cat <<EOF
+[Unit]
+Description=work_container service
+After=network-online.target
+Wants=network-online.target
+After=systemd-user-sessions.service graphical.target display-manager.service
+Wants=graphical.target
+RequiresMountsFor=${CURRENT_HOME}
+RequiresMountsFor=${HOME_CONTAINERS_DIR}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${RUNTIME_BASE}
+Environment=WORK_CONTAINER_PODMAN_BIN=podman
+Environment=WORK_CONTAINER_HOST_HOME=${CURRENT_HOME}
+Environment=WORK_CONTAINER_HOST_UID=${CURRENT_UID}
+Environment=WORK_CONTAINER_HOST_GID=${CURRENT_GID}
+Environment=WORK_CONTAINER_HOST_RUNTIME_DIR=/run/user/${CURRENT_UID}
+Environment=WORK_CONTAINER_ARCHIVE_DIR=${HOME_CONTAINERS_DIR}
+Environment=WORK_CONTAINER_WAIT_FOR_GUI=1
+Environment=WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT=300
+Environment=WORK_CONTAINER_WAIT_FOR_PAYLOAD=1
+Environment=WORK_CONTAINER_WAIT_FOR_PAYLOAD_TIMEOUT=300
+ExecStart=${RUNTIME_SCRIPTS_DIR}/service-start
+ExecStop=${RUNTIME_SCRIPTS_DIR}/service-stop
+ExecReload=${RUNTIME_SCRIPTS_DIR}/service-stop
+ExecReload=${RUNTIME_SCRIPTS_DIR}/service-start
+TimeoutStartSec=180
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+)"
+
+  echo "${unit_content}" | sudo tee "${SYSTEMD_UNIT_PATH}" >/dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  echo "Installed systemd service (on-demand start): ${SERVICE_NAME}"
+}
+
+install_sudoers_rule() {
+  local rule
+  rule="${CURRENT_USER} ALL=(root) NOPASSWD: ${PODMAN_PATH}, ${SYSTEMCTL_PATH} start ${SERVICE_NAME}"
+  echo "${rule}" | sudo tee "${SUDOERS_PATH}" >/dev/null
+  sudo chmod 440 "${SUDOERS_PATH}"
+  echo "Installed sudoers rule for passwordless podman: ${SUDOERS_PATH}"
+}
+
+echo "Installing/updating work_container integration..."
+ensure_user_dirs
+ensure_built_image
+sync_home_container_archive
+install_runtime_bundle
+install_runner_bin
+WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${SCRIPTS_DIR}/install-desktop"
+install_aliases
+install_sudoers_rule
+install_systemd_service
+
+echo
+echo "Install complete."
+echo "- Desktop entries updated"
+echo "- Runtime bundle installed: ${RUNTIME_BASE}"
+echo "- App runner installed: ${SYSTEM_RUNNER_BIN}"
+echo "- sf/sfdx aliases installed (open new shell or run: source ~/.bashrc)"
+echo "- Passwordless sudo for podman/systemctl-start installed (${SUDOERS_PATH})"
+echo "- Service installed (starts on first app/tool launch): ${SERVICE_NAME}"

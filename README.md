@@ -23,12 +23,47 @@ For X11 GUI access from container apps:
 xhost +si:localuser:$USER
 ```
 
-## 2) Configure VPN outside the container
+## 2) Install/Update on host
 
-Run the interactive script:
+Run:
 
 ```bash
-./configure-vpn
+./start install
+```
+
+This command will:
+- build image if no build archive exists yet
+- copy latest build archive to `~/.containers` (old versions there are removed)
+- install/update desktop entries in `~/.local/share/applications`
+- install `sf`/`sfdx` aliases in `~/.bashrc` to use container CLI
+- install a sudoers rule for passwordless `podman` (required for desktop launchers and `./start app ...`)
+- install/update system service `work_container.service` (on-demand start via app runner)
+
+After first install, open a new shell (or run `source ~/.bashrc`) to use aliases.
+
+To remove integration:
+
+```bash
+./start uninstall
+```
+
+## 3) Configure VPN outside the container
+
+Host certs are synced automatically during:
+- `./start build`
+- `./start run`
+- `./start service-start`
+
+Manual sync is still available:
+
+```bash
+./start sync-certs
+```
+
+Run:
+
+```bash
+./start configure-vpn
 ```
 
 This creates `config/vpn.env`.
@@ -37,10 +72,15 @@ If needed, edit `config/vpn.env` manually later (username/password/server/option
 Optionally edit `config/swanctl.conf.template` for advanced changes.  
 This file is mounted from host, so no rebuild is required.
 
-## 3) Build image
+Certificate sources used by the container:
+- project snapshot: `certs/host` (from `./start sync-certs`)
+- project custom certs: `certs/custom`
+- live host cert store mounted in container
+
+## 4) Build image
 
 ```bash
-./build
+./start build
 ```
 
 This always builds image `work_container:latest` and saves it to:
@@ -51,10 +91,10 @@ Example:
 
 `containers/work_container-20260429-132501.oci`
 
-## 4) Run container
+## 5) Run container
 
 ```bash
-./run
+./start run
 ```
 
 This loads and runs the newest build version found in `containers/`.
@@ -62,14 +102,15 @@ This loads and runs the newest build version found in `containers/`.
 Run specific build version:
 
 ```bash
-./run 20260429-132501
+./start run 20260429-132501
 ```
 
 Run a specific app directly:
 
 ```bash
-./run -- google-chrome-stable
-./run -- firefox-esr
+./start app google-chrome
+./start app firefox
+./start app sf --version
 ```
 
 ## 4b) Run as persistent service (recommended for host tools)
@@ -77,44 +118,63 @@ Run a specific app directly:
 Start service (latest build):
 
 ```bash
-./service-start
+./start service-start
+```
+
+Alias command (same behavior):
+
+```bash
+./start start-service
+```
+
+If GUI apps fail after login/session changes, restart service so new display/runtime mounts apply:
+
+```bash
+./start service-stop
+./start service-start
 ```
 
 Start specific build:
 
 ```bash
-./service-start 20260429-132501
+./start service-start 20260429-132501
 ```
 
 Check status/log tail:
 
 ```bash
-./service-status
+./start service-status
 ```
 
 Stop service:
 
 ```bash
-./service-stop
+./start service-stop
 ```
 
 Run tools from the running service container:
 
 ```bash
-./exec-in sf --version
-./exec-in google-chrome-stable
-./exec-in firefox-esr
+./start app sf --version
+./start app google-chrome
+./start app firefox
 ```
 
 Service mode mounts your full host home directory as read/write at the same path,
 so container tools/apps can work with your normal files.
+
+`exec-in` stores app/tool configs in:
+
+`~/.containers/work_container/home`
+
+This keeps container app settings isolated from your normal host app configs.
 
 ## 5) Update VPN settings without rebuild
 
 Edit `config/vpn.env` and/or `config/swanctl.conf.template`, then restart container:
 
 ```bash
-./run
+./start run
 ```
 
 No image rebuild needed for VPN config changes.
@@ -126,7 +186,7 @@ No image rebuild needed for VPN config changes.
 Rebuilding is cleaner and reproducible:
 
 ```bash
-./build
+./start build
 ```
 
 ### Helper script
@@ -134,12 +194,12 @@ Rebuilding is cleaner and reproducible:
 Use the included helper:
 
 ```bash
-./update
+./start update
 ```
 
 This always:
 - loads the newest build archive from `containers/`
-- updates packages in that image
+- updates APT packages and refreshes Salesforce CLI (`sf`) in that image
 - creates a new build version archive in `containers/`
 
 ## 7) Portable single-file image
@@ -165,17 +225,19 @@ Your scripts already keep portable archives at:
 - The current setup is designed for Linux hosts.
 - Scripts run with rootful Podman (`sudo`) and `run` uses an isolated bridge network.
 - `service-start` mounts `${HOME}` read/write into the container at the same path.
+- `service-start` also mounts host display/runtime resources, `/dev/dri`, `/dev/snd`, and DBus socket for GUI/GPU/audio integration.
+- `service-start` runs with `apparmor=unconfined` to allow DBus access from container apps.
 - VPN credentials are stored in `config/vpn.env` on host, not baked into image.
 - If VPN negotiation fails, entrypoint exits and internet remains blocked for the container process.
-- Use only these commands day-to-day: `./configure-vpn`, `./build`, `./run`, `./update`.
-- `./run` uses latest build by default and accepts a build version argument.
+- Use `./start` as the single entry point; it can run build/run/update/service/exec-in commands.
+- `./start` with no args opens an interactive selection menu.
 
 ## 8) Desktop launchers on host
 
 Install user-level desktop entries:
 
 ```bash
-./install-desktop
+./start install-desktop
 ```
 
 This installs launchers into:
@@ -186,4 +248,4 @@ Created entries:
 - `Google Chrome (Work)`
 - `Firefox (Work)`
 
-They run apps from the running service container through `./exec-in`, so traffic still goes via container VPN.
+They run apps from the running service container through `./start`, so traffic still goes via container VPN.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG_DIR="config"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_DIR="${PROJECT_DIR}/config"
 ENV_EXAMPLE="${CONFIG_DIR}/vpn.env.example"
 ENV_FILE="${CONFIG_DIR}/vpn.env"
 

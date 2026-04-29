@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: ./start exec-in <command> [args...]" >&2
+  exit 1
+fi
+
+if ! ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null)"; then
+  echo "Cannot access root podman. Run ./start install (adds sudoers rule) or authenticate with: sudo -v" >&2
+  exit 1
+fi
+
+if ! grep -qx 'work_container' <<< "${ps_names}"; then
+  echo "work_container service is not running. Start it with: ./start service-start" >&2
+  exit 1
+fi
+
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+HOST_GROUPS_CSV="$(id -G | tr ' ' ',')"
+GPU_GIDS=()
+if [[ -e /dev/dri/renderD128 ]]; then
+  GPU_GIDS+=("$(stat -c '%g' /dev/dri/renderD128)")
+fi
+if [[ -e /dev/dri/card0 ]]; then
+  GPU_GIDS+=("$(stat -c '%g' /dev/dri/card0)")
+fi
+for gid in "${GPU_GIDS[@]}"; do
+  if [[ -n "${gid}" ]] && [[ ",${HOST_GROUPS_CSV}," != *",${gid},"* ]]; then
+    HOST_GROUPS_CSV="${HOST_GROUPS_CSV},${gid}"
+  fi
+done
+
+WORK_HOME="${HOME}/.containers/work_container"
+APP_HOME="${WORK_HOME}/home"
+CMD=("$@")
+
+ensure_app_home() {
+  mkdir -p "${APP_HOME}/.config" "${APP_HOME}/.cache" "${APP_HOME}/.local/share"
+}
+
+ensure_app_home
+
+if [[ "${CMD[0]}" == "google-chrome" ]] || [[ "${CMD[0]}" == "google-chrome-stable" ]]; then
+  CMD+=(
+    "--enable-features=UseOzonePlatform"
+    "--ozone-platform-hint=auto"
+    "--ozone-platform=wayland"
+    "--class=Google-chrome-work"
+    "--name=Google-chrome-work"
+  )
+fi
+if [[ "${CMD[0]}" == "firefox" ]] || [[ "${CMD[0]}" == "firefox-esr" ]]; then
+  CMD+=(
+    "--class"
+    "Firefox-work"
+    "--name"
+    "Firefox-work"
+  )
+fi
+
+ENV_ARGS=()
+if [[ -n "${DISPLAY:-}" ]]; then
+  ENV_ARGS+=(--env "DISPLAY=${DISPLAY}")
+fi
+if [[ -n "${XAUTHORITY:-}" ]]; then
+  ENV_ARGS+=(--env "XAUTHORITY=${XAUTHORITY}")
+fi
+if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+  ENV_ARGS+=(--env "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+fi
+if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+  ENV_ARGS+=(--env "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}")
+fi
+if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+  ENV_ARGS+=(--env "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}")
+fi
+if [[ -n "${PULSE_SERVER:-}" ]]; then
+  ENV_ARGS+=(--env "PULSE_SERVER=${PULSE_SERVER}")
+fi
+if [[ -n "${PIPEWIRE_REMOTE:-}" ]]; then
+  ENV_ARGS+=(--env "PIPEWIRE_REMOTE=${PIPEWIRE_REMOTE}")
+fi
+if [[ -n "${LIBVA_DRIVER_NAME:-}" ]]; then
+  ENV_ARGS+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")
+fi
+if [[ -n "${LIBVA_DRIVERS_PATH:-}" ]]; then
+  ENV_ARGS+=(--env "LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH}")
+fi
+if [[ -n "${VDPAU_DRIVER:-}" ]]; then
+  ENV_ARGS+=(--env "VDPAU_DRIVER=${VDPAU_DRIVER}")
+fi
+ENV_ARGS+=(--env "HOME=${APP_HOME}")
+ENV_ARGS+=(--env "XDG_CONFIG_HOME=${APP_HOME}/.config")
+ENV_ARGS+=(--env "XDG_CACHE_HOME=${APP_HOME}/.cache")
+ENV_ARGS+=(--env "XDG_DATA_HOME=${APP_HOME}/.local/share")
+
+sudo podman exec "${ENV_ARGS[@]}" work_container \
+  setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"

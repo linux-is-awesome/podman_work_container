@@ -5,15 +5,28 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    ffmpeg \
     gettext-base \
     gnupg \
     iproute2 \
     iptables \
+    libcanberra-gtk3-module \
     libasound2 \
+    libva2 \
+    libva-drm2 \
+    libva-wayland2 \
+    libegl1 \
     libgbm1 \
+    libgl1 \
+    libgl1-mesa-dri \
+    libavcodec-extra \
     libgtk-3-0 \
     libnss3 \
+    libpci3 \
+    libvulkan1 \
     libx11-6 \
+    mesa-va-drivers \
+    mesa-vulkan-drivers \
     libcharon-extra-plugins \
     libcharon-extauth-plugins \
     libstrongswan-extra-plugins \
@@ -22,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     strongswan \
     strongswan-swanctl \
     xauth \
+    vainfo \
     xz-utils \
     xdg-utils \
     firefox-esr \
@@ -42,7 +56,7 @@ RUN curl -fsSL https://developer.salesforce.com/media/salesforce-cli/sf/channels
     && ln -s /opt/sf/bin/sf /usr/local/bin/sf \
     && rm -f /tmp/sf.tar.xz
 
-COPY entrypoint.sh /usr/local/bin/work_container-entrypoint
+COPY scripts/entrypoint /usr/local/bin/work_container-entrypoint
 RUN chmod +x /usr/local/bin/work_container-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/work_container-entrypoint"]

@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${PROJECT_DIR}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
+  "${SCRIPT_DIR}/sync-certs" >/dev/null
+fi
+
+IMAGE_REPO="work_container"
+CONTAINER_NAME="work_container"
+CONFIG_DIR="${PROJECT_DIR}/config"
+ARCHIVE_DIR="${PROJECT_DIR}/containers"
+CERTS_DIR="${PROJECT_DIR}/certs"
+REQUESTED_VERSION=""
+CMD=("bash")
+TTY_ARGS=("-it")
+PODMAN_BIN=(sudo podman)
+
+print_host_runtime_status() {
+  local wayland_sock=""
+  local lines=()
+  if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
+    lines+=("  X11: OK (DISPLAY=${DISPLAY})")
+  else
+    lines+=("  X11: missing (DISPLAY or /tmp/.X11-unix)")
+  fi
+
+  if [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+    wayland_sock="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+    if [[ -S "${wayland_sock}" ]]; then
+      lines+=("  Wayland: OK (${wayland_sock})")
+    else
+      lines+=("  Wayland: missing socket (${wayland_sock})")
+    fi
+  else
+    lines+=("  Wayland: missing (WAYLAND_DISPLAY or XDG_RUNTIME_DIR)")
+  fi
+
+  if [[ -e /dev/dri/renderD128 ]]; then
+    lines+=("  GPU render node: OK (/dev/dri/renderD128)")
+  else
+    lines+=("  GPU render node: missing (/dev/dri/renderD128)")
+  fi
+
+  if [[ -d /dev/snd ]]; then
+    lines+=("  ALSA device: OK (/dev/snd)")
+  else
+    lines+=("  ALSA device: missing (/dev/snd)")
+  fi
+
+  if [[ -n "${PULSE_SERVER:-}" ]]; then
+    lines+=("  PulseAudio env: OK (${PULSE_SERVER})")
+  else
+    lines+=("  PulseAudio env: not set")
+  fi
+
+  printf '%s\n' "${lines[@]}"
+}
+
+if [[ $# -gt 0 ]] && [[ "${1}" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
+  REQUESTED_VERSION="${1}"
+  shift
+fi
+
+if [[ $# -gt 0 ]] && [[ "${1}" == "--" ]]; then
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  CMD=("$@")
+  TTY_ARGS=()
+fi
+
+if [[ ! -f "${CONFIG_DIR}/vpn.env" ]]; then
+  echo "Missing ${CONFIG_DIR}/vpn.env. Run ./start configure-vpn first." >&2
+  exit 1
+fi
+
+if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
+  echo "Missing ${CONFIG_DIR}/swanctl.conf.template" >&2
+  exit 1
+fi
+
+LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+if [[ -z "${LATEST_ARCHIVE}" ]]; then
+  echo "No build archives found in ${ARCHIVE_DIR}/. Run ./start build first." >&2
+  exit 1
+fi
+
+if [[ -n "${REQUESTED_VERSION}" ]]; then
+  ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${REQUESTED_VERSION}.oci"
+  if [[ ! -f "${ARCHIVE_PATH}" ]]; then
+    echo "Build version not found: ${REQUESTED_VERSION}" >&2
+    echo "Available builds:" >&2
+    ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sed 's#.*/work_container-\(.*\)\.oci#  \1#' >&2
+    exit 1
+  fi
+else
+  ARCHIVE_PATH="${LATEST_ARCHIVE}"
+fi
+
+BUILD_VERSION="$(basename "${ARCHIVE_PATH}")"
+BUILD_VERSION="${BUILD_VERSION#work_container-}"
+BUILD_VERSION="${BUILD_VERSION%.oci}"
+IMAGE_NAME="${IMAGE_REPO}:${BUILD_VERSION}"
+
+echo "Loading image from ${ARCHIVE_PATH}..."
+"${PODMAN_BIN[@]}" load -i "${ARCHIVE_PATH}" >/dev/null
+
+HOST_STATUS="$(print_host_runtime_status)"
+
+if [[ "${CMD[0]}" == "bash" ]] && [[ "${#CMD[@]}" -eq 1 ]]; then
+  echo "[start run] Host runtime status (interactive preflight):"
+  echo "${HOST_STATUS}"
+fi
+
+DISPLAY_ARGS=()
+if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
+  DISPLAY_ARGS+=("-e" "DISPLAY=${DISPLAY}")
+  DISPLAY_ARGS+=("-v" "/tmp/.X11-unix:/tmp/.X11-unix:rw")
+fi
+
+if [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+  WAYLAND_SOCK="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+  if [[ -S "${WAYLAND_SOCK}" ]]; then
+    DISPLAY_ARGS+=("-e" "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+    DISPLAY_ARGS+=("-e" "XDG_RUNTIME_DIR=/tmp/xdg-runtime")
+    DISPLAY_ARGS+=("-v" "${WAYLAND_SOCK}:/tmp/xdg-runtime/${WAYLAND_DISPLAY}:rw")
+  fi
+fi
+
+if [[ -d /dev/dri ]]; then
+  DISPLAY_ARGS+=("--device" "/dev/dri:/dev/dri:rwm")
+fi
+if [[ -d /dev/snd ]]; then
+  DISPLAY_ARGS+=("--device" "/dev/snd:/dev/snd:rwm")
+fi
+if [[ -S /run/dbus/system_bus_socket ]]; then
+  DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
+fi
+
+"${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+"${PODMAN_BIN[@]}" run --name "${CONTAINER_NAME}" --hostname "${CONTAINER_NAME}" --rm "${TTY_ARGS[@]}" \
+  --network bridge \
+  --group-add keep-groups \
+  --device-cgroup-rule "c 226:* rwm" \
+  --device-cgroup-rule "c 116:* rwm" \
+  --shm-size=1g \
+  --cap-add NET_ADMIN \
+  --cap-add NET_RAW \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  --security-opt apparmor=unconfined \
+  -v "${CONFIG_DIR}:/config:ro" \
+  -v "${CERTS_DIR}:/project-certs:ro" \
+  -v "/etc/passwd:/etc/passwd:ro" \
+  -v "/etc/group:/etc/group:ro" \
+  -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
+  -e "PULSE_SERVER=unix:/run/user/$(id -u)/pulse/native" \
+  "${DISPLAY_ARGS[@]}" \
+  "${IMAGE_NAME}" "${CMD[@]}"
