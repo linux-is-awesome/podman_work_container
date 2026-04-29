@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Google Chrome (Work)
+Comment=Google Chrome from work_container
+Exec=__PROJECT_DIR__/exec-in google-chrome-stable
+Icon=google-chrome
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true

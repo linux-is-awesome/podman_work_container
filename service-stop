@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sudo podman rm -f work_container >/dev/null 2>&1 || true
+echo "Service stopped."

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Firefox (Work)
+Comment=Firefox from work_container
+Exec=__PROJECT_DIR__/exec-in firefox-esr
+Icon=firefox
+Terminal=false
+Categories=Network;WebBrowser;
+StartupNotify=true

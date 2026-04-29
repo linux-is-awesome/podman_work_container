@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_DIR="${PROJECT_DIR}/desktop"
+TARGET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+
+mkdir -p "${TARGET_DIR}"
+
+for file in google-chrome-work.desktop firefox-work.desktop; do
+  src="${SOURCE_DIR}/${file}"
+  dst="${TARGET_DIR}/${file}"
+  if [[ ! -f "${src}" ]]; then
+    echo "Missing desktop file: ${src}" >&2
+    exit 1
+  fi
+  sed "s|__PROJECT_DIR__|${PROJECT_DIR}|g" "${src}" > "${dst}"
+  chmod 644 "${dst}"
+  echo "Installed ${dst}"
+done
+
+update-desktop-database "${TARGET_DIR}" >/dev/null 2>&1 || true
+echo "Desktop launchers installed. Look for:"
+echo "- Google Chrome (Work)"
+echo "- Firefox (Work)"

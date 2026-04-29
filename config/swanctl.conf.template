@@ -1,0 +1,38 @@
+connections {
+  ${VPN_CONN} {
+    version = 2
+    proposals = ${VPN_IKE_PROPOSAL}
+    remote_addrs = ${VPN_SERVER_ADDR}
+    vips = 0.0.0.0,::
+    encap = yes
+    mobike = no
+
+    local {
+      auth = eap-mschapv2
+      id = ${VPN_LOCAL_ID}
+      eap_id = ${VPN_USERNAME}
+    }
+
+    remote {
+      auth = pubkey
+      id = ${VPN_REMOTE_ID}
+    }
+
+    children {
+      ${VPN_CHILD} {
+        local_ts = 0.0.0.0/0
+        remote_ts = 0.0.0.0/0
+        start_action = start
+        dpd_action = restart
+        esp_proposals = ${VPN_ESP_PROPOSAL}
+      }
+    }
+  }
+}
+
+secrets {
+  eap-${VPN_CONN} {
+    id = ${VPN_USERNAME}
+    secret = "${VPN_PASSWORD}"
+  }
+}

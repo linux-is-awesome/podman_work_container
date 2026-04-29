@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_DIR="config"
+ENV_EXAMPLE="${CONFIG_DIR}/vpn.env.example"
+ENV_FILE="${CONFIG_DIR}/vpn.env"
+
+if [[ ! -f "${ENV_EXAMPLE}" ]]; then
+  echo "Missing ${ENV_EXAMPLE}" >&2
+  exit 1
+fi
+
+cp "${ENV_EXAMPLE}" "${ENV_FILE}"
+
+read -rp "VPN server: " VPN_SERVER
+if [[ -z "${VPN_SERVER}" ]]; then
+  echo "VPN server is required." >&2
+  exit 1
+fi
+
+read -rp "VPN remote ID: " VPN_REMOTE_ID
+VPN_REMOTE_ID="${VPN_REMOTE_ID:-${VPN_SERVER}}"
+
+read -rp "VPN username: " VPN_USERNAME
+if [[ -z "${VPN_USERNAME}" ]]; then
+  echo "VPN username is required." >&2
+  exit 1
+fi
+
+read -rsp "VPN password: " VPN_PASSWORD
+echo
+if [[ -z "${VPN_PASSWORD}" ]]; then
+  echo "VPN password is required." >&2
+  exit 1
+fi
+
+sed -i "s|^VPN_SERVER=.*$|VPN_SERVER=${VPN_SERVER}|" "${ENV_FILE}"
+sed -i "s|^VPN_REMOTE_ID=.*$|VPN_REMOTE_ID=${VPN_REMOTE_ID}|" "${ENV_FILE}"
+sed -i "s|^VPN_USERNAME=.*$|VPN_USERNAME=${VPN_USERNAME}|" "${ENV_FILE}"
+sed -i "s|^VPN_PASSWORD=.*$|VPN_PASSWORD=${VPN_PASSWORD}|" "${ENV_FILE}"
+
+echo "Saved VPN config to ${ENV_FILE}"

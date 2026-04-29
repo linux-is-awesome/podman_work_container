@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGE_REPO="work_container"
+CONTAINER_NAME="work_container"
+CONFIG_DIR="$(pwd)/config"
+ARCHIVE_DIR="containers"
+REQUESTED_VERSION=""
+CMD=("bash")
+TTY_ARGS=("-it")
+PODMAN_BIN=(sudo podman)
+
+if [[ $# -gt 0 ]] && [[ "${1}" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
+  REQUESTED_VERSION="${1}"
+  shift
+fi
+
+if [[ $# -gt 0 ]] && [[ "${1}" == "--" ]]; then
+  shift
+fi
+
+if [[ $# -gt 0 ]]; then
+  CMD=("$@")
+  TTY_ARGS=()
+fi
+
+if [[ ! -f "${CONFIG_DIR}/vpn.env" ]]; then
+  echo "Missing ${CONFIG_DIR}/vpn.env. Run ./configure-vpn first." >&2
+  exit 1
+fi
+
+if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
+  echo "Missing ${CONFIG_DIR}/swanctl.conf.template" >&2
+  exit 1
+fi
+
+if [[ ! -d "${ARCHIVE_DIR}" ]]; then
+  echo "Missing ${ARCHIVE_DIR}/ directory. Run ./build first." >&2
+  exit 1
+fi
+
+LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+if [[ -z "${LATEST_ARCHIVE}" ]]; then
+  echo "No build archives found in ${ARCHIVE_DIR}/. Run ./build first." >&2
+  exit 1
+fi
+
+if [[ -n "${REQUESTED_VERSION}" ]]; then
+  ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${REQUESTED_VERSION}.oci"
+  if [[ ! -f "${ARCHIVE_PATH}" ]]; then
+    echo "Build version not found: ${REQUESTED_VERSION}" >&2
+    echo "Available builds:" >&2
+    ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sed 's#.*/work_container-\(.*\)\.oci#  \1#' >&2
+    exit 1
+  fi
+else
+  ARCHIVE_PATH="${LATEST_ARCHIVE}"
+fi
+
+BUILD_VERSION="$(basename "${ARCHIVE_PATH}")"
+BUILD_VERSION="${BUILD_VERSION#work_container-}"
+BUILD_VERSION="${BUILD_VERSION%.oci}"
+IMAGE_NAME="${IMAGE_REPO}:${BUILD_VERSION}"
+
+echo "Loading image from ${ARCHIVE_PATH}..."
+"${PODMAN_BIN[@]}" load -i "${ARCHIVE_PATH}" >/dev/null
+
+DISPLAY_ARGS=()
+
+if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
+  DISPLAY_ARGS+=("-e" "DISPLAY=${DISPLAY}")
+  DISPLAY_ARGS+=("-v" "/tmp/.X11-unix:/tmp/.X11-unix:rw")
+fi
+
+if [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+  WAYLAND_SOCK="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+  if [[ -S "${WAYLAND_SOCK}" ]]; then
+    DISPLAY_ARGS+=("-e" "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+    DISPLAY_ARGS+=("-e" "XDG_RUNTIME_DIR=/tmp/xdg-runtime")
+    DISPLAY_ARGS+=("-v" "${WAYLAND_SOCK}:/tmp/xdg-runtime/${WAYLAND_DISPLAY}:rw")
+  fi
+fi
+
+"${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+"${PODMAN_BIN[@]}" run --name "${CONTAINER_NAME}" --hostname "${CONTAINER_NAME}" --rm "${TTY_ARGS[@]}" \
+  --network bridge \
+  --cap-add NET_ADMIN \
+  --cap-add NET_RAW \
+  --device /dev/net/tun \
+  --security-opt label=disable \
+  -v "${CONFIG_DIR}:/config:ro" \
+  "${DISPLAY_ARGS[@]}" \
+  "${IMAGE_NAME}" "${CMD[@]}"

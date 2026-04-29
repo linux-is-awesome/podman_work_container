@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: ./exec-in <command> [args...]" >&2
+  exit 1
+fi
+
+if ! sudo podman ps --format '{{.Names}}' | grep -qx 'work_container'; then
+  echo "work_container service is not running. Start it with: ./service-start" >&2
+  exit 1
+fi
+
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
+ENV_ARGS=()
+if [[ -n "${DISPLAY:-}" ]]; then
+  ENV_ARGS+=(--env "DISPLAY=${DISPLAY}")
+fi
+if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+  ENV_ARGS+=(--env "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+  ENV_ARGS+=(--env "XDG_RUNTIME_DIR=/tmp/xdg-runtime")
+fi
+
+sudo podman exec --user "${HOST_UID}:${HOST_GID}" "${ENV_ARGS[@]}" work_container "$@"

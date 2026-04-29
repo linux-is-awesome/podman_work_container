@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! sudo podman ps --format '{{.Names}}' | grep -qx 'work_container'; then
+  echo "work_container service is not running."
+  exit 1
+fi
+
+echo "work_container service is running."
+sudo podman ps --filter name=work_container
+echo
+sudo podman logs --tail 40 work_container
