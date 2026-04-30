@@ -19,7 +19,7 @@ fi
 : "${VPN_PASSWORD:?Set VPN_PASSWORD in ${VPN_ENV_FILE}}"
 : "${VPN_LOCAL_ID:=%any}"
 : "${VPN_IKE_PROPOSAL:=aes256-sha256-modp2048}"
-: "${VPN_ESP_PROPOSAL:=aes256-sha256-modp2048}"
+: "${VPN_ESP_PROPOSAL:=aes256-sha256}"
 : "${VPN_SERVER_ADDR:=}"
 
 if [[ ! -f "${VPN_TEMPLATE_FILE}" ]]; then
@@ -140,4 +140,38 @@ else
 fi
 
 echo "[work_container] VPN is up. Starting command: $*"
+
+vpn_watchdog() {
+  local failures=0
+  while true; do
+    sleep 30
+
+    if "${SWANCTL_BIN}" --list-sas 2>/dev/null | grep -q "${VPN_CHILD}"; then
+      failures=0
+      continue
+    fi
+
+    echo "[work_container] VPN watchdog: CHILD_SA missing, trying to re-initiate ${VPN_CHILD}..."
+    if "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1; then
+      failures=0
+      continue
+    fi
+
+    failures=$((failures + 1))
+    if (( failures < 3 )); then
+      continue
+    fi
+
+    echo "[work_container] VPN watchdog: repeated CHILD_SA failures, restarting strongSwan..."
+    "${IPSEC_BIN}" stop >/dev/null 2>&1 || true
+    sleep 1
+    "${IPSEC_BIN}" start >/dev/null 2>&1 || true
+    sleep 1
+    "${SWANCTL_BIN}" --load-all >/dev/null 2>&1 || true
+    "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1 || true
+    failures=0
+  done
+}
+
+vpn_watchdog &
 exec "$@"

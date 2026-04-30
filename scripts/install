@@ -169,7 +169,12 @@ ENV_ARGS=()
 [[ -n "${VDPAU_DRIVER:-}" ]] && ENV_ARGS+=(--env "VDPAU_DRIVER=${VDPAU_DRIVER}")
 ENV_ARGS+=(--env "HOME=${APP_HOME}" --env "XDG_CONFIG_HOME=${APP_HOME}/.config" --env "XDG_CACHE_HOME=${APP_HOME}/.cache" --env "XDG_DATA_HOME=${APP_HOME}/.local/share")
 
-sudo podman exec "${ENV_ARGS[@]}" work_container setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
+WORKDIR_ARGS=()
+if [[ -n "${PWD:-}" ]]; then
+  WORKDIR_ARGS+=(--workdir "${PWD}")
+fi
+
+sudo podman exec "${WORKDIR_ARGS[@]}" "${ENV_ARGS[@]}" work_container setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
 EOF
   sudo chmod 755 "${SYSTEM_RUNNER_BIN}"
   echo "Installed system runner: ${SYSTEM_RUNNER_BIN}"
