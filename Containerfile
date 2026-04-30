@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
     gettext-base \
+    git \
     gnupg \
     iproute2 \
     iptables \

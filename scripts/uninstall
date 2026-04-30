@@ -9,6 +9,7 @@ SUDOERS_PATH="/etc/sudoers.d/work_container-$(id -un)"
 RUNNER_BIN="/usr/local/bin/work-container-app"
 SF_WRAPPER_BIN="/usr/local/bin/sf"
 SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
+WORK_SHELL_BIN="/usr/local/bin/work-shell"
 RUNTIME_BASE="/usr/local/lib/work_container"
 
 remove_desktop_entries() {
@@ -62,6 +63,11 @@ remove_cli_wrappers() {
   echo "Removed CLI wrappers ${SF_WRAPPER_BIN} and ${SFDX_WRAPPER_BIN}"
 }
 
+remove_shell_wrapper() {
+  sudo rm -f "${WORK_SHELL_BIN}"
+  echo "Removed shell wrapper ${WORK_SHELL_BIN}"
+}
+
 remove_runtime_bundle() {
   sudo rm -rf "${RUNTIME_BASE}"
   echo "Removed runtime bundle ${RUNTIME_BASE}"
@@ -75,6 +81,7 @@ remove_container_archives
 remove_sudoers_rule
 remove_runner_bin
 remove_cli_wrappers
+remove_shell_wrapper
 remove_runtime_bundle
 
 echo
@@ -86,5 +93,6 @@ echo "- Archive folders removed"
 echo "- Passwordless podman sudo rule removed"
 echo "- App runner removed (${RUNNER_BIN})"
 echo "- sf/sfdx wrappers removed (${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN})"
+echo "- shell wrapper removed (${WORK_SHELL_BIN})"
 echo "- Runtime bundle removed (${RUNTIME_BASE})"
 echo "- Local app state preserved (${HOME}/.containers/work_container)"

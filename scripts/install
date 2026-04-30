@@ -17,6 +17,7 @@ SUDOERS_PATH="/etc/sudoers.d/work_container-${CURRENT_USER}"
 SYSTEM_RUNNER_BIN="/usr/local/bin/work-container-app"
 SF_WRAPPER_BIN="/usr/local/bin/sf"
 SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
+WORK_SHELL_BIN="/usr/local/bin/work-shell"
 RUNTIME_BASE="/usr/local/lib/work_container"
 RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/scripts"
 HOME_STATE_DIR="${CURRENT_HOME}/.containers/work_container"
@@ -189,6 +190,26 @@ EOF
   echo "Installed CLI wrappers: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
 }
 
+install_shell_wrapper() {
+  cat <<EOF | sudo tee "${WORK_SHELL_BIN}" >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+SERVICE_NAME="work_container.service"
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "\${SERVICE_NAME}"
+fi
+
+if [[ \$# -eq 0 ]]; then
+  exec sudo podman exec -it -e PS1='work-shell# ' work_container bash --noprofile --norc -i
+else
+  exec sudo podman exec -it work_container "\$@"
+fi
+EOF
+  sudo chmod 755 "${WORK_SHELL_BIN}"
+  echo "Installed shell wrapper: ${WORK_SHELL_BIN}"
+}
+
 install_runtime_bundle() {
   sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config" "${RUNTIME_BASE}/certs"
   sudo cp -f "${SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-start"
@@ -259,6 +280,24 @@ install_sudoers_rule() {
   echo "Installed sudoers rule for passwordless podman: ${SUDOERS_PATH}"
 }
 
+restart_service() {
+  if ! sudo systemctl restart "${SERVICE_NAME}"; then
+    echo "Failed to restart ${SERVICE_NAME} after install." >&2
+    exit 1
+  fi
+
+  for _ in $(seq 1 30); do
+    if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+      echo "Restarted service and refreshed running container: ${SERVICE_NAME}"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "Service restarted but work_container is not running." >&2
+  exit 1
+}
+
 echo "Installing/updating work_container integration..."
 ensure_user_dirs
 ensure_built_image
@@ -266,9 +305,11 @@ sync_home_container_archive
 install_runtime_bundle
 install_runner_bin
 install_cli_wrappers
+install_shell_wrapper
 WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${SCRIPTS_DIR}/install-desktop"
 install_sudoers_rule
 install_systemd_service
+restart_service
 
 echo
 echo "Install complete."
@@ -276,5 +317,6 @@ echo "- Desktop entries updated"
 echo "- Runtime bundle installed: ${RUNTIME_BASE}"
 echo "- App runner installed: ${SYSTEM_RUNNER_BIN}"
 echo "- sf/sfdx wrappers installed: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
+echo "- shell wrapper installed: ${WORK_SHELL_BIN}"
 echo "- Passwordless sudo for podman/systemctl-start/restart installed (${SUDOERS_PATH})"
-echo "- Service installed (starts on first app/tool launch): ${SERVICE_NAME}"
+echo "- Service installed and restarted: ${SERVICE_NAME}"
