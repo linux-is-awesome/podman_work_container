@@ -113,7 +113,7 @@ mkdir -p "${APP_HOME}/.config" "${APP_HOME}/.cache" "${APP_HOME}/.local/share"
 case "${APP}" in
   google-chrome|chrome)
     CMD=(google-chrome-stable "$@")
-    CMD+=("--enable-features=UseOzonePlatform" "--ozone-platform-hint=auto" "--ozone-platform=wayland" "--class=Google-chrome-work" "--name=Google-chrome-work")
+    CMD+=("--enable-features=UseOzonePlatform" "--ozone-platform-hint=auto" "--ozone-platform=wayland" "--font-render-hinting=full" "--class=Google-chrome-work" "--name=Google-chrome-work")
     ;;
   firefox)
     CMD=(firefox-esr "$@")

@@ -192,6 +192,24 @@ if [[ -x "${SCRIPT_DIR}/chrome-work-open" ]]; then
   DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
   DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/google-chrome:ro")
 fi
+if [[ -d /etc/fonts ]]; then
+  DISPLAY_ARGS+=("-v" "/etc/fonts:/etc/fonts:ro")
+fi
+if [[ -d /usr/share/fonts ]]; then
+  DISPLAY_ARGS+=("-v" "/usr/share/fonts:/usr/share/fonts:ro")
+fi
+if [[ -d /usr/local/share/fonts ]]; then
+  DISPLAY_ARGS+=("-v" "/usr/local/share/fonts:/usr/local/share/fonts:ro")
+fi
+if [[ -d "${HOST_HOME}/.local/share/fonts" ]]; then
+  DISPLAY_ARGS+=("-v" "${HOST_HOME}/.local/share/fonts:${HOST_HOME}/.local/share/fonts:ro")
+fi
+if [[ -d "${HOST_HOME}/.fonts" ]]; then
+  DISPLAY_ARGS+=("-v" "${HOST_HOME}/.fonts:${HOST_HOME}/.fonts:ro")
+fi
+if [[ -d "${HOST_HOME}/.config/fontconfig" ]]; then
+  DISPLAY_ARGS+=("-v" "${HOST_HOME}/.config/fontconfig:${HOST_HOME}/.config/fontconfig:ro")
+fi
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 

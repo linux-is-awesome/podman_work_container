@@ -42,14 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     firefox-esr \
     && rm -rf /var/lib/apt/lists/*
 
-# Microsoft Core Fonts (Arial, Times New Roman, etc.) for web apps and documents.
-# Package lives in Debian contrib (not main).
-RUN printf 'deb http://deb.debian.org/debian bookworm contrib\n' > /etc/apt/sources.list.d/bookworm-contrib.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends debconf \
-    && echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula boolean true | debconf-set-selections \
-    && apt-get install -y --no-install-recommends ttf-mscorefonts-installer \
-    && rm -rf /var/lib/apt/lists/*
+# Minimal explicit GTK font rendering defaults in container.
+RUN mkdir -p /etc/gtk-3.0 /etc/gtk-4.0 \
+    && printf '[Settings]\ngtk-font-name=Ubuntu 11\ngtk-xft-antialias=1\ngtk-xft-hinting=1\ngtk-xft-hintstyle=hintslight\ngtk-xft-rgba=none\n' > /etc/gtk-3.0/settings.ini \
+    && printf '[Settings]\ngtk-font-name=Ubuntu 11\ngtk-xft-antialias=1\ngtk-xft-hinting=1\ngtk-xft-hintstyle=hintslight\ngtk-xft-rgba=none\n' > /etc/gtk-4.0/settings.ini
 
 # Install Google Chrome from official repo.
 RUN mkdir -p /etc/apt/keyrings \

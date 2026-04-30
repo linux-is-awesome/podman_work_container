@@ -47,6 +47,7 @@ if [[ "${CMD[0]}" == "google-chrome" ]] || [[ "${CMD[0]}" == "google-chrome-stab
     "--enable-features=UseOzonePlatform"
     "--ozone-platform-hint=auto"
     "--ozone-platform=wayland"
+    "--font-render-hinting=full"
     "--class=Google-chrome-work"
     "--name=Google-chrome-work"
   )
