@@ -42,11 +42,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     firefox-esr \
     && rm -rf /var/lib/apt/lists/*
 
-# Minimal explicit GTK font rendering defaults in container.
-RUN mkdir -p /etc/gtk-3.0 /etc/gtk-4.0 \
-    && printf '[Settings]\ngtk-font-name=Ubuntu 11\ngtk-xft-antialias=1\ngtk-xft-hinting=1\ngtk-xft-hintstyle=hintslight\ngtk-xft-rgba=none\n' > /etc/gtk-3.0/settings.ini \
-    && printf '[Settings]\ngtk-font-name=Ubuntu 11\ngtk-xft-antialias=1\ngtk-xft-hinting=1\ngtk-xft-hintstyle=hintslight\ngtk-xft-rgba=none\n' > /etc/gtk-4.0/settings.ini
-
 # Install Google Chrome from official repo.
 RUN mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Shared host mount helpers for container launchers.
+
+add_host_mounts() {
+  local -n _mount_args="$1"
+  local script_dir="$2"
+  local host_home="$3"
+
+  if [[ -x "${script_dir}/chrome-work-open" ]]; then
+    _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
+    _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/google-chrome:ro")
+  fi
+
+  if [[ -d /etc/fonts ]]; then
+    _mount_args+=("-v" "/etc/fonts:/etc/fonts:ro")
+  fi
+  if [[ -d /usr/share/fonts ]]; then
+    _mount_args+=("-v" "/usr/share/fonts:/usr/share/fonts:ro")
+  fi
+  if [[ -d /usr/local/share/fonts ]]; then
+    _mount_args+=("-v" "/usr/local/share/fonts:/usr/local/share/fonts:ro")
+  fi
+  if [[ -d "${host_home}/.local/share/fonts" ]]; then
+    _mount_args+=("-v" "${host_home}/.local/share/fonts:${host_home}/.local/share/fonts:ro")
+  fi
+  if [[ -d "${host_home}/.fonts" ]]; then
+    _mount_args+=("-v" "${host_home}/.fonts:${host_home}/.fonts:ro")
+  fi
+  if [[ -d "${host_home}/.config/fontconfig" ]]; then
+    _mount_args+=("-v" "${host_home}/.config/fontconfig:${host_home}/.config/fontconfig:ro")
+  fi
+}

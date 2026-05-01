@@ -8,57 +8,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
   "${SCRIPT_DIR}/sync-certs" >/dev/null
 fi
+source "${SCRIPT_DIR}/image-utils"
+source "${SCRIPT_DIR}/host-mounts"
+source "${SCRIPT_DIR}/host-gtk-settings"
+source "${SCRIPT_DIR}/runtime-status"
 
-IMAGE_REPO="work_container"
+IMAGE_NAME_PREFIX="work_container"
 CONTAINER_NAME="work_container"
 CONFIG_DIR="${PROJECT_DIR}/config"
-ARCHIVE_DIR="${PROJECT_DIR}/containers"
+IMAGE_DIR="${PROJECT_DIR}/containers"
 CERTS_DIR="${PROJECT_DIR}/certs"
 REQUESTED_VERSION=""
 CMD=("bash")
 TTY_ARGS=("-it")
 PODMAN_BIN=(sudo podman)
-
-print_host_runtime_status() {
-  local wayland_sock=""
-  local lines=()
-  if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
-    lines+=("  X11: OK (DISPLAY=${DISPLAY})")
-  else
-    lines+=("  X11: missing (DISPLAY or /tmp/.X11-unix)")
-  fi
-
-  if [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
-    wayland_sock="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
-    if [[ -S "${wayland_sock}" ]]; then
-      lines+=("  Wayland: OK (${wayland_sock})")
-    else
-      lines+=("  Wayland: missing socket (${wayland_sock})")
-    fi
-  else
-    lines+=("  Wayland: missing (WAYLAND_DISPLAY or XDG_RUNTIME_DIR)")
-  fi
-
-  if [[ -e /dev/dri/renderD128 ]]; then
-    lines+=("  GPU render node: OK (/dev/dri/renderD128)")
-  else
-    lines+=("  GPU render node: missing (/dev/dri/renderD128)")
-  fi
-
-  if [[ -d /dev/snd ]]; then
-    lines+=("  ALSA device: OK (/dev/snd)")
-  else
-    lines+=("  ALSA device: missing (/dev/snd)")
-  fi
-
-  if [[ -n "${PULSE_SERVER:-}" ]]; then
-    lines+=("  PulseAudio env: OK (${PULSE_SERVER})")
-  else
-    lines+=("  PulseAudio env: not set")
-  fi
-
-  printf '%s\n' "${lines[@]}"
-}
+HOST_UID="$(id -u)"
+HOST_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${HOST_UID}}"
 
 if [[ $# -gt 0 ]] && [[ "${1}" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
   REQUESTED_VERSION="${1}"
@@ -84,33 +49,31 @@ if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
   exit 1
 fi
 
-LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-if [[ -z "${LATEST_ARCHIVE}" ]]; then
-  echo "No build archives found in ${ARCHIVE_DIR}/. Run ./start build first." >&2
+LATEST_IMAGE="$(find_latest_image "${IMAGE_DIR}")"
+if [[ -z "${LATEST_IMAGE}" ]]; then
+  echo "No built image files found in ${IMAGE_DIR}/. Run ./start build first." >&2
   exit 1
 fi
 
 if [[ -n "${REQUESTED_VERSION}" ]]; then
-  ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${REQUESTED_VERSION}.oci"
-  if [[ ! -f "${ARCHIVE_PATH}" ]]; then
+  IMAGE_PATH="${IMAGE_DIR}/work_container-${REQUESTED_VERSION}.oci"
+  if [[ ! -f "${IMAGE_PATH}" ]]; then
     echo "Build version not found: ${REQUESTED_VERSION}" >&2
     echo "Available builds:" >&2
-    ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sed 's#.*/work_container-\(.*\)\.oci#  \1#' >&2
+    ls -1 "${IMAGE_DIR}"/work_container-*.oci 2>/dev/null | sed 's#.*/work_container-\(.*\)\.oci#  \1#' >&2
     exit 1
   fi
 else
-  ARCHIVE_PATH="${LATEST_ARCHIVE}"
+  IMAGE_PATH="${LATEST_IMAGE}"
 fi
 
-BUILD_VERSION="$(basename "${ARCHIVE_PATH}")"
-BUILD_VERSION="${BUILD_VERSION#work_container-}"
-BUILD_VERSION="${BUILD_VERSION%.oci}"
-IMAGE_NAME="${IMAGE_REPO}:${BUILD_VERSION}"
+BUILD_VERSION="$(image_version_from_path "${IMAGE_PATH}")"
+IMAGE_NAME="${IMAGE_NAME_PREFIX}:${BUILD_VERSION}"
 
-echo "Loading image from ${ARCHIVE_PATH}..."
-"${PODMAN_BIN[@]}" load -i "${ARCHIVE_PATH}" >/dev/null
+echo "Loading image from ${IMAGE_PATH}..."
+"${PODMAN_BIN[@]}" load -i "${IMAGE_PATH}" >/dev/null
 
-HOST_STATUS="$(print_host_runtime_status)"
+HOST_STATUS="$(print_runtime_status_for_host "${DISPLAY:-}" "${WAYLAND_DISPLAY:-}" "${XDG_RUNTIME_DIR:-}" "${PULSE_SERVER:-}")"
 
 if [[ "${CMD[0]}" == "bash" ]] && [[ "${#CMD[@]}" -eq 1 ]]; then
   echo "[start run] Host runtime status (interactive preflight):"
@@ -141,28 +104,8 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
-if [[ -x "${SCRIPT_DIR}/chrome-work-open" ]]; then
-  DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
-  DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/google-chrome:ro")
-fi
-if [[ -d /etc/fonts ]]; then
-  DISPLAY_ARGS+=("-v" "/etc/fonts:/etc/fonts:ro")
-fi
-if [[ -d /usr/share/fonts ]]; then
-  DISPLAY_ARGS+=("-v" "/usr/share/fonts:/usr/share/fonts:ro")
-fi
-if [[ -d /usr/local/share/fonts ]]; then
-  DISPLAY_ARGS+=("-v" "/usr/local/share/fonts:/usr/local/share/fonts:ro")
-fi
-if [[ -d "${HOME}/.local/share/fonts" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOME}/.local/share/fonts:${HOME}/.local/share/fonts:ro")
-fi
-if [[ -d "${HOME}/.fonts" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOME}/.fonts:${HOME}/.fonts:ro")
-fi
-if [[ -d "${HOME}/.config/fontconfig" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOME}/.config/fontconfig:${HOME}/.config/fontconfig:ro")
-fi
+add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOME}"
+prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 

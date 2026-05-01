@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Shared host/runtime status formatting helpers.
+
+print_runtime_status_for_host() {
+  local display_value="${1:-${DISPLAY:-}}"
+  local wayland_display="${2:-}"
+  local runtime_dir="${3:-}"
+  local pulse_desc="${4:-}"
+  local wayland_sock=""
+  local lines=()
+
+  if [[ -n "${display_value}" ]] && [[ -d /tmp/.X11-unix ]]; then
+    lines+=("  X11: OK (DISPLAY=${display_value})")
+  else
+    lines+=("  X11: missing (DISPLAY or /tmp/.X11-unix)")
+  fi
+
+  if [[ -n "${wayland_display}" ]] && [[ -n "${runtime_dir}" ]]; then
+    wayland_sock="${runtime_dir}/${wayland_display}"
+    if [[ -S "${wayland_sock}" ]]; then
+      lines+=("  Wayland: OK (${wayland_sock})")
+    else
+      lines+=("  Wayland: missing socket (${wayland_sock})")
+    fi
+  else
+    lines+=("  Wayland: missing (WAYLAND_DISPLAY or XDG_RUNTIME_DIR)")
+  fi
+
+  if [[ -e /dev/dri/renderD128 ]]; then
+    lines+=("  GPU render node: OK (/dev/dri/renderD128)")
+  else
+    lines+=("  GPU render node: missing (/dev/dri/renderD128)")
+  fi
+
+  if [[ -d /dev/snd ]]; then
+    lines+=("  ALSA device: OK (/dev/snd)")
+  else
+    lines+=("  ALSA device: missing (/dev/snd)")
+  fi
+
+  if [[ -n "${pulse_desc}" ]]; then
+    if [[ "${pulse_desc}" == unix:* ]] || [[ "${pulse_desc}" == /* ]]; then
+      local pulse_sock="${pulse_desc#unix:}"
+      if [[ -S "${pulse_sock}" ]]; then
+        lines+=("  PulseAudio socket: OK (${pulse_sock})")
+      else
+        lines+=("  PulseAudio socket: missing (${pulse_sock})")
+      fi
+    else
+      lines+=("  PulseAudio env: OK (${pulse_desc})")
+    fi
+  else
+    lines+=("  PulseAudio env: not set")
+  fi
+
+  printf '%s\n' "${lines[@]}"
+}

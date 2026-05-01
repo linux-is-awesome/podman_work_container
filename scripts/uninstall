@@ -38,11 +38,11 @@ remove_podman_artifacts() {
   echo "Removed running/stopped work_container podman artifacts"
 }
 
-remove_container_archives() {
+remove_container_images() {
   if [[ -d "${HOME_CONTAINERS_DIR}" ]]; then
     rm -f "${HOME_CONTAINERS_DIR}"/work_container-*.oci
   fi
-  echo "Removed installed container archives from:"
+  echo "Removed installed container image files from:"
   echo "- ${HOME_CONTAINERS_DIR} (folder preserved)"
 }
 
@@ -77,7 +77,7 @@ echo "Uninstalling work_container host integration..."
 remove_desktop_entries
 remove_systemd_service
 remove_podman_artifacts
-remove_container_archives
+remove_container_images
 remove_sudoers_rule
 remove_runner_bin
 remove_cli_wrappers
@@ -89,7 +89,7 @@ echo "Uninstall complete."
 echo "- Service removed"
 echo "- Desktop entries removed"
 echo "- Podman container/images removed"
-echo "- Archive folders removed"
+echo "- Image folders removed"
 echo "- Passwordless podman sudo rule removed"
 echo "- App runner removed (${RUNNER_BIN})"
 echo "- sf/sfdx wrappers removed (${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN})"

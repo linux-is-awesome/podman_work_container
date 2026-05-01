@@ -10,18 +10,18 @@ if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
 fi
 
 IMAGE_REPO="work_container"
-ARCHIVE_DIR="${PROJECT_DIR}/containers"
+IMAGE_DIR="${PROJECT_DIR}/containers"
 BUILD_VERSION="$(date +%Y%m%d-%H%M%S)"
 IMAGE_VERSION_TAG="${IMAGE_REPO}:${BUILD_VERSION}"
 IMAGE_LATEST_TAG="${IMAGE_REPO}:latest"
-ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${BUILD_VERSION}.oci"
+IMAGE_PATH="${IMAGE_DIR}/work_container-${BUILD_VERSION}.oci"
 PODMAN_BIN=(sudo podman)
 
-mkdir -p "${ARCHIVE_DIR}"
+mkdir -p "${IMAGE_DIR}"
 "${PODMAN_BIN[@]}" build -t "${IMAGE_VERSION_TAG}" -f "${PROJECT_DIR}/Containerfile" "${PROJECT_DIR}"
 "${PODMAN_BIN[@]}" tag "${IMAGE_VERSION_TAG}" "${IMAGE_LATEST_TAG}"
-"${PODMAN_BIN[@]}" save --format oci-archive -o "${ARCHIVE_PATH}" "${IMAGE_VERSION_TAG}"
+"${PODMAN_BIN[@]}" save --format oci-archive -o "${IMAGE_PATH}" "${IMAGE_VERSION_TAG}"
 
 echo "Built image: ${IMAGE_VERSION_TAG}"
 echo "Updated latest tag: ${IMAGE_LATEST_TAG}"
-echo "Saved archive: ${ARCHIVE_PATH}"
+echo "Saved image file: ${IMAGE_PATH}"

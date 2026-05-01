@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Shared helpers for resolving work_container OCI image files.
+
+find_latest_image() {
+  local image_dir="$1"
+  ls -1 "${image_dir}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true
+}
+
+image_version_from_path() {
+  local image_path="$1"
+  local version
+  version="$(basename "${image_path}")"
+  version="${version#work_container-}"
+  version="${version%.oci}"
+  echo "${version}"
+}

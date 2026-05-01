@@ -3,6 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPTS_DIR="${PROJECT_DIR}/scripts"
+source "${SCRIPTS_DIR}/image-utils"
 CONTAINERS_DIR="${PROJECT_DIR}/containers"
 HOME_CONTAINERS_DIR="${HOME}/.containers"
 SERVICE_NAME="work_container.service"
@@ -29,26 +30,26 @@ ensure_user_dirs() {
 }
 
 ensure_built_image() {
-  local latest_archive
-  latest_archive="$(ls -1 "${CONTAINERS_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-  if [[ -z "${latest_archive}" ]]; then
-    echo "No built container archive found. Building now..."
+  local latest_image
+  latest_image="$(find_latest_image "${CONTAINERS_DIR}")"
+  if [[ -z "${latest_image}" ]]; then
+    echo "No built container image file found. Building now..."
     "${SCRIPTS_DIR}/build"
   fi
 }
 
-sync_home_container_archive() {
-  local latest_archive target_archive
+sync_home_container_image() {
+  local latest_image target_image
   mkdir -p "${HOME_CONTAINERS_DIR}"
-  latest_archive="$(ls -1 "${CONTAINERS_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-  if [[ -z "${latest_archive}" ]]; then
-    echo "No source archive found in ${CONTAINERS_DIR}" >&2
+  latest_image="$(find_latest_image "${CONTAINERS_DIR}")"
+  if [[ -z "${latest_image}" ]]; then
+    echo "No source image file found in ${CONTAINERS_DIR}" >&2
     exit 1
   fi
-  target_archive="${HOME_CONTAINERS_DIR}/$(basename "${latest_archive}")"
+  target_image="${HOME_CONTAINERS_DIR}/$(basename "${latest_image}")"
   rm -f "${HOME_CONTAINERS_DIR}"/work_container-*.oci
-  cp -f "${latest_archive}" "${target_archive}"
-  echo "Synced latest archive to ${target_archive}"
+  cp -f "${latest_image}" "${target_image}"
+  echo "Synced latest image file to ${target_image}"
 }
 
 install_runner_bin() {
@@ -222,6 +223,10 @@ install_runtime_bundle() {
   sudo cp -f "${SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/service-status"
   sudo cp -f "${SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
   sudo cp -f "${SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open"
+  sudo cp -f "${SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-mounts"
+  sudo cp -f "${SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings"
+  sudo cp -f "${SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/image-utils"
+  sudo cp -f "${SCRIPTS_DIR}/runtime-status" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
   sudo cp -f "${PROJECT_DIR}/config/swanctl.conf.template" "${RUNTIME_BASE}/config/swanctl.conf.template"
   if [[ -f "${PROJECT_DIR}/config/vpn.env" ]]; then
     sudo cp -f "${PROJECT_DIR}/config/vpn.env" "${RUNTIME_BASE}/config/vpn.env"
@@ -229,7 +234,7 @@ install_runtime_bundle() {
   if [[ -d "${PROJECT_DIR}/certs" ]]; then
     sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
   fi
-  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open"
+  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
   echo "Installed runtime bundle: ${RUNTIME_BASE}"
 }
 
@@ -254,7 +259,7 @@ Environment=WORK_CONTAINER_HOST_HOME=${CURRENT_HOME}
 Environment=WORK_CONTAINER_HOST_UID=${CURRENT_UID}
 Environment=WORK_CONTAINER_HOST_GID=${CURRENT_GID}
 Environment=WORK_CONTAINER_HOST_RUNTIME_DIR=/run/user/${CURRENT_UID}
-Environment=WORK_CONTAINER_ARCHIVE_DIR=${HOME_CONTAINERS_DIR}
+Environment=WORK_CONTAINER_IMAGE_DIR=${HOME_CONTAINERS_DIR}
 Environment=WORK_CONTAINER_WAIT_FOR_GUI=1
 Environment=WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT=300
 Environment=WORK_CONTAINER_WAIT_FOR_PAYLOAD=1
@@ -306,7 +311,7 @@ restart_service() {
 echo "Installing/updating work_container integration..."
 ensure_user_dirs
 ensure_built_image
-sync_home_container_archive
+sync_home_container_image
 install_runtime_bundle
 install_runner_bin
 install_cli_wrappers

@@ -8,11 +8,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
   "${SCRIPT_DIR}/sync-certs" >/dev/null
 fi
+source "${SCRIPT_DIR}/image-utils"
+source "${SCRIPT_DIR}/host-mounts"
+source "${SCRIPT_DIR}/host-gtk-settings"
+source "${SCRIPT_DIR}/runtime-status"
 
-IMAGE_REPO="work_container"
+IMAGE_NAME_PREFIX="work_container"
 CONTAINER_NAME="work_container"
 CONFIG_DIR="${PROJECT_DIR}/config"
-ARCHIVE_DIR="${PROJECT_DIR}/containers"
+IMAGE_DIR="${PROJECT_DIR}/containers"
 CERTS_DIR="${PROJECT_DIR}/certs"
 REQUESTED_VERSION="${1:-}"
 PODMAN_BIN_CMD="${WORK_CONTAINER_PODMAN_BIN:-sudo podman}"
@@ -21,7 +25,7 @@ HOST_HOME="${WORK_CONTAINER_HOST_HOME:-${HOME}}"
 HOST_UID="${WORK_CONTAINER_HOST_UID:-$(id -u)}"
 HOST_GID="${WORK_CONTAINER_HOST_GID:-$(id -g)}"
 HOST_RUNTIME_DIR="${WORK_CONTAINER_HOST_RUNTIME_DIR:-/run/user/${HOST_UID}}"
-ARCHIVE_DIR="${WORK_CONTAINER_ARCHIVE_DIR:-${ARCHIVE_DIR}}"
+IMAGE_DIR="${WORK_CONTAINER_IMAGE_DIR:-${IMAGE_DIR}}"
 HOST_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
 WAIT_FOR_GUI="${WORK_CONTAINER_WAIT_FOR_GUI:-0}"
 WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-180}"
@@ -54,17 +58,17 @@ wait_for_gui_readiness() {
 wait_for_payload() {
   local waited=0
   local step=2
-  local latest_archive=""
+  local latest_image=""
 
   if [[ "${WAIT_FOR_PAYLOAD}" != "1" ]]; then
     return
   fi
 
-  echo "Waiting for container payload in ${ARCHIVE_DIR}..."
+  echo "Waiting for container payload in ${IMAGE_DIR}..."
   while (( waited < WAIT_FOR_PAYLOAD_TIMEOUT )); do
-    if [[ -d "${ARCHIVE_DIR}" ]]; then
-      latest_archive="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-      if [[ -n "${latest_archive}" ]]; then
+    if [[ -d "${IMAGE_DIR}" ]]; then
+      latest_image="$(find_latest_image "${IMAGE_DIR}")"
+      if [[ -n "${latest_image}" ]]; then
         echo "Container payload detected."
         return
       fi
@@ -84,45 +88,6 @@ ensure_host_runtime_dir() {
   chmod 700 "${HOST_RUNTIME_DIR}"
 }
 
-print_host_runtime_status() {
-  local wayland_sock="${HOST_RUNTIME_DIR}/${HOST_WAYLAND_DISPLAY:-}"
-  local pulse_sock="${HOST_RUNTIME_DIR}/pulse/native"
-  local lines=()
-  if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
-    lines+=("  X11: OK (DISPLAY=${DISPLAY})")
-  else
-    lines+=("  X11: missing (DISPLAY or /tmp/.X11-unix)")
-  fi
-
-  if [[ -n "${HOST_WAYLAND_DISPLAY}" ]] && [[ -S "${wayland_sock}" ]]; then
-    lines+=("  Wayland: OK (${wayland_sock})")
-  elif [[ -S "${HOST_RUNTIME_DIR}/wayland-0" ]]; then
-    lines+=("  Wayland: OK (${HOST_RUNTIME_DIR}/wayland-0, auto-detected)")
-  else
-    lines+=("  Wayland: missing (${wayland_sock})")
-  fi
-
-  if [[ -e /dev/dri/renderD128 ]]; then
-    lines+=("  GPU render node: OK (/dev/dri/renderD128)")
-  else
-    lines+=("  GPU render node: missing (/dev/dri/renderD128)")
-  fi
-
-  if [[ -d /dev/snd ]]; then
-    lines+=("  ALSA device: OK (/dev/snd)")
-  else
-    lines+=("  ALSA device: missing (/dev/snd)")
-  fi
-
-  if [[ -S "${pulse_sock}" ]]; then
-    lines+=("  PulseAudio socket: OK (${pulse_sock})")
-  else
-    lines+=("  PulseAudio socket: missing (${pulse_sock})")
-  fi
-
-  printf '%s\n' "${lines[@]}"
-}
-
 if [[ ! -f "${CONFIG_DIR}/vpn.env" ]]; then
   echo "Missing ${CONFIG_DIR}/vpn.env. Run ./start configure-vpn first." >&2
   exit 1
@@ -134,43 +99,41 @@ fi
 
 wait_for_payload
 
-if [[ ! -d "${ARCHIVE_DIR}" ]]; then
-  echo "Archive directory not found: ${ARCHIVE_DIR}"
+if [[ ! -d "${IMAGE_DIR}" ]]; then
+  echo "Image file directory not found: ${IMAGE_DIR}"
   echo "No payload installed; skipping container start."
   exit 0
 fi
 
-LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-if [[ -z "${LATEST_ARCHIVE}" ]]; then
-  echo "No container archives found in ${ARCHIVE_DIR}/."
+LATEST_IMAGE="$(find_latest_image "${IMAGE_DIR}")"
+if [[ -z "${LATEST_IMAGE}" ]]; then
+  echo "No container image files found in ${IMAGE_DIR}/."
   echo "No payload installed; skipping container start."
   exit 0
 fi
 
 if [[ -n "${REQUESTED_VERSION}" ]]; then
-  ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${REQUESTED_VERSION}.oci"
-  if [[ ! -f "${ARCHIVE_PATH}" ]]; then
+  IMAGE_PATH="${IMAGE_DIR}/work_container-${REQUESTED_VERSION}.oci"
+  if [[ ! -f "${IMAGE_PATH}" ]]; then
     echo "Build version not found: ${REQUESTED_VERSION}" >&2
     exit 1
   fi
 else
-  ARCHIVE_PATH="${LATEST_ARCHIVE}"
+  IMAGE_PATH="${LATEST_IMAGE}"
 fi
 
-BUILD_VERSION="$(basename "${ARCHIVE_PATH}")"
-BUILD_VERSION="${BUILD_VERSION#work_container-}"
-BUILD_VERSION="${BUILD_VERSION%.oci}"
-IMAGE_NAME="${IMAGE_REPO}:${BUILD_VERSION}"
+BUILD_VERSION="$(image_version_from_path "${IMAGE_PATH}")"
+IMAGE_NAME="${IMAGE_NAME_PREFIX}:${BUILD_VERSION}"
 
-echo "Loading image from ${ARCHIVE_PATH}..."
-"${PODMAN_BIN[@]}" load -i "${ARCHIVE_PATH}" >/dev/null
+echo "Loading image from ${IMAGE_PATH}..."
+"${PODMAN_BIN[@]}" load -i "${IMAGE_PATH}" >/dev/null
 
 wait_for_gui_readiness
 ensure_host_runtime_dir
 if [[ -z "${HOST_WAYLAND_DISPLAY}" ]] && [[ -S "${HOST_RUNTIME_DIR}/wayland-0" ]]; then
   HOST_WAYLAND_DISPLAY="wayland-0"
 fi
-HOST_STATUS="$(print_host_runtime_status)"
+HOST_STATUS="$(print_runtime_status_for_host "${DISPLAY:-}" "${HOST_WAYLAND_DISPLAY:-}" "${HOST_RUNTIME_DIR}" "unix:${HOST_RUNTIME_DIR}/pulse/native")"
 
 DISPLAY_ARGS=()
 if [[ -d /tmp/.X11-unix ]]; then
@@ -188,28 +151,8 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
-if [[ -x "${SCRIPT_DIR}/chrome-work-open" ]]; then
-  DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
-  DISPLAY_ARGS+=("-v" "${SCRIPT_DIR}/chrome-work-open:/usr/local/bin/google-chrome:ro")
-fi
-if [[ -d /etc/fonts ]]; then
-  DISPLAY_ARGS+=("-v" "/etc/fonts:/etc/fonts:ro")
-fi
-if [[ -d /usr/share/fonts ]]; then
-  DISPLAY_ARGS+=("-v" "/usr/share/fonts:/usr/share/fonts:ro")
-fi
-if [[ -d /usr/local/share/fonts ]]; then
-  DISPLAY_ARGS+=("-v" "/usr/local/share/fonts:/usr/local/share/fonts:ro")
-fi
-if [[ -d "${HOST_HOME}/.local/share/fonts" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOST_HOME}/.local/share/fonts:${HOST_HOME}/.local/share/fonts:ro")
-fi
-if [[ -d "${HOST_HOME}/.fonts" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOST_HOME}/.fonts:${HOST_HOME}/.fonts:ro")
-fi
-if [[ -d "${HOST_HOME}/.config/fontconfig" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOST_HOME}/.config/fontconfig:${HOST_HOME}/.config/fontconfig:ro")
-fi
+add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOST_HOME}"
+prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOST_HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 

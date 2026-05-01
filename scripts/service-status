@@ -1,32 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ARCHIVE_DIR="${WORK_CONTAINER_ARCHIVE_DIR:-${HOME}/.containers}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/image-utils"
+
+IMAGE_DIR="${WORK_CONTAINER_IMAGE_DIR:-${HOME}/.containers}"
 
 if ! ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null)"; then
   echo "Cannot access root podman. Run ./start install (adds sudoers rule) or authenticate with: sudo -v"
   exit 1
 fi
 
-if [[ ! -d "${ARCHIVE_DIR}" ]]; then
-  echo "work_container service is installed, but no payload directory found at ${ARCHIVE_DIR}."
+if grep -qx 'work_container' <<< "${ps_names}"; then
+  echo "work_container service is running."
+  sudo podman ps --filter name=work_container
+  echo
+  sudo podman logs --tail 40 work_container
+  exit 0
+fi
+
+if [[ ! -d "${IMAGE_DIR}" ]]; then
+  echo "work_container service is installed, but no payload directory found at ${IMAGE_DIR}."
   echo "Nothing to run yet."
   exit 0
 fi
 
-latest_archive="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-if [[ -z "${latest_archive}" ]]; then
-  echo "work_container service is installed, but no container image is present in ${ARCHIVE_DIR}."
+latest_image="$(find_latest_image "${IMAGE_DIR}")"
+if [[ -z "${latest_image}" ]]; then
+  echo "work_container service is installed, but no container image file is present in ${IMAGE_DIR}."
   echo "Nothing to run yet."
   exit 0
 fi
 
-if ! grep -qx 'work_container' <<< "${ps_names}"; then
-  echo "work_container service is not running."
-  exit 1
-fi
-
-echo "work_container service is running."
-sudo podman ps --filter name=work_container
-echo
-sudo podman logs --tail 40 work_container
+echo "work_container service is not running."
+exit 1

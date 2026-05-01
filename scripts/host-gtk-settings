@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Build GTK settings files from host Tweaks/GSettings values.
+
+strip_quotes() {
+  local value="${1:-}"
+  value="${value#\'}"
+  value="${value%\'}"
+  echo "${value}"
+}
+
+gsettings_get_for_host() {
+  local host_home="$1"
+  local host_runtime_dir="$2"
+  local host_uid="$3"
+  local key="$4"
+  local host_user
+  host_user="$(getent passwd "${host_uid}" | cut -d: -f1)"
+
+  if [[ -z "${host_user}" ]] || [[ ! -S "${host_runtime_dir}/bus" ]]; then
+    return 1
+  fi
+
+  if ! command -v gsettings >/dev/null 2>&1; then
+    return 1
+  fi
+
+  if [[ "$(id -u)" == "${host_uid}" ]]; then
+    HOME="${host_home}" XDG_RUNTIME_DIR="${host_runtime_dir}" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=${host_runtime_dir}/bus" \
+      gsettings get org.gnome.desktop.interface "${key}" 2>/dev/null
+  else
+    sudo -u "${host_user}" env \
+      HOME="${host_home}" \
+      XDG_RUNTIME_DIR="${host_runtime_dir}" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=${host_runtime_dir}/bus" \
+      gsettings get org.gnome.desktop.interface "${key}" 2>/dev/null
+  fi
+}
+
+prepare_host_gtk_settings_mounts() {
+  local -n _mount_args="$1"
+  local host_home="$2"
+  local host_runtime_dir="$3"
+  local host_uid="$4"
+  local settings_dir="${host_home}/.containers/work_container/gtk-settings"
+  local gtk3_out="${settings_dir}/gtk-3-settings.ini"
+  local gtk4_out="${settings_dir}/gtk-4-settings.ini"
+  local font_name antialias hinting hintstyle rgba antialias_num hinting_num
+
+  mkdir -p "${settings_dir}"
+
+  font_name="$(gsettings_get_for_host "${host_home}" "${host_runtime_dir}" "${host_uid}" "font-name" || true)"
+  antialias="$(gsettings_get_for_host "${host_home}" "${host_runtime_dir}" "${host_uid}" "font-antialiasing" || true)"
+  hinting="$(gsettings_get_for_host "${host_home}" "${host_runtime_dir}" "${host_uid}" "font-hinting" || true)"
+
+  font_name="$(strip_quotes "${font_name}")"
+  antialias="$(strip_quotes "${antialias}")"
+  hinting="$(strip_quotes "${hinting}")"
+
+  if [[ -n "${font_name}" ]] || [[ -n "${antialias}" ]] || [[ -n "${hinting}" ]]; then
+    case "${antialias}" in
+      none) antialias_num=0; rgba="none" ;;
+      grayscale) antialias_num=1; rgba="none" ;;
+      rgba|subpixel) antialias_num=1; rgba="rgb" ;;
+      *) antialias_num=1; rgba="rgb" ;;
+    esac
+
+    case "${hinting}" in
+      none) hintstyle="hintnone"; hinting_num=0 ;;
+      slight) hintstyle="hintslight" ;;
+      medium) hintstyle="hintmedium" ;;
+      full) hintstyle="hintfull" ;;
+      *) hintstyle="hintslight" ;;
+    esac
+    : "${hinting_num:=1}"
+
+    {
+      echo "[Settings]"
+      [[ -n "${font_name}" ]] && echo "gtk-font-name=${font_name}"
+      echo "gtk-xft-antialias=${antialias_num}"
+      echo "gtk-xft-hinting=${hinting_num}"
+      echo "gtk-xft-hintstyle=${hintstyle}"
+      echo "gtk-xft-rgba=${rgba}"
+    } > "${gtk3_out}"
+    cp -f "${gtk3_out}" "${gtk4_out}"
+  else
+    if [[ -f "${host_home}/.config/gtk-3.0/settings.ini" ]]; then
+      cp -f "${host_home}/.config/gtk-3.0/settings.ini" "${gtk3_out}"
+    elif [[ -f "/etc/gtk-3.0/settings.ini" ]]; then
+      cp -f "/etc/gtk-3.0/settings.ini" "${gtk3_out}"
+    else
+      echo "[Settings]" > "${gtk3_out}"
+    fi
+
+    if [[ -f "${host_home}/.config/gtk-4.0/settings.ini" ]]; then
+      cp -f "${host_home}/.config/gtk-4.0/settings.ini" "${gtk4_out}"
+    elif [[ -f "/etc/gtk-4.0/settings.ini" ]]; then
+      cp -f "/etc/gtk-4.0/settings.ini" "${gtk4_out}"
+    else
+      cp -f "${gtk3_out}" "${gtk4_out}"
+    fi
+  fi
+
+  _mount_args+=("-v" "${gtk3_out}:/etc/gtk-3.0/settings.ini:ro")
+  _mount_args+=("-v" "${gtk4_out}:/etc/gtk-4.0/settings.ini:ro")
+}

@@ -6,28 +6,28 @@ cd "${PROJECT_DIR}"
 
 IMAGE_REPO="work_container"
 TEMP_CONTAINER="work_container_update"
-ARCHIVE_DIR="${PROJECT_DIR}/containers"
+IMAGE_DIR="${PROJECT_DIR}/containers"
 NEW_VERSION="$(date +%Y%m%d-%H%M%S)"
 NEW_IMAGE_TAG="${IMAGE_REPO}:${NEW_VERSION}"
 LATEST_IMAGE_TAG="${IMAGE_REPO}:latest"
 PODMAN_BIN=(sudo podman)
 
-mkdir -p "${ARCHIVE_DIR}"
+mkdir -p "${IMAGE_DIR}"
 
-LATEST_ARCHIVE="$(ls -1 "${ARCHIVE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
-if [[ -z "${LATEST_ARCHIVE}" ]]; then
-  echo "No build archives found in ${ARCHIVE_DIR}/. Run ./start build first." >&2
+LATEST_IMAGE="$(ls -1 "${IMAGE_DIR}"/work_container-*.oci 2>/dev/null | sort | tail -n 1 || true)"
+if [[ -z "${LATEST_IMAGE}" ]]; then
+  echo "No built image files found in ${IMAGE_DIR}/. Run ./start build first." >&2
   exit 1
 fi
 
-LATEST_VERSION="$(basename "${LATEST_ARCHIVE}")"
+LATEST_VERSION="$(basename "${LATEST_IMAGE}")"
 LATEST_VERSION="${LATEST_VERSION#work_container-}"
 LATEST_VERSION="${LATEST_VERSION%.oci}"
 SOURCE_IMAGE_TAG="${IMAGE_REPO}:${LATEST_VERSION}"
-NEW_ARCHIVE_PATH="${ARCHIVE_DIR}/work_container-${NEW_VERSION}.oci"
+NEW_IMAGE_PATH="${IMAGE_DIR}/work_container-${NEW_VERSION}.oci"
 
-echo "Loading latest image from ${LATEST_ARCHIVE}..."
-"${PODMAN_BIN[@]}" load -i "${LATEST_ARCHIVE}" >/dev/null
+echo "Loading latest image from ${LATEST_IMAGE}..."
+"${PODMAN_BIN[@]}" load -i "${LATEST_IMAGE}" >/dev/null
 
 echo "Removing previous temp container (if any): ${TEMP_CONTAINER}"
 "${PODMAN_BIN[@]}" rm -f "${TEMP_CONTAINER}" >/dev/null 2>&1 || true
@@ -46,8 +46,8 @@ echo "Committing updated container to image: ${NEW_IMAGE_TAG}"
 "${PODMAN_BIN[@]}" commit "${TEMP_CONTAINER}" "${NEW_IMAGE_TAG}" >/dev/null
 "${PODMAN_BIN[@]}" tag "${NEW_IMAGE_TAG}" "${LATEST_IMAGE_TAG}"
 
-echo "Saving refreshed archive: ${NEW_ARCHIVE_PATH}"
-"${PODMAN_BIN[@]}" save --format oci-archive -o "${NEW_ARCHIVE_PATH}" "${NEW_IMAGE_TAG}"
+echo "Saving refreshed image file: ${NEW_IMAGE_PATH}"
+"${PODMAN_BIN[@]}" save --format oci-archive -o "${NEW_IMAGE_PATH}" "${NEW_IMAGE_TAG}"
 
 echo "Removing temp container: ${TEMP_CONTAINER}"
 "${PODMAN_BIN[@]}" rm "${TEMP_CONTAINER}" >/dev/null
