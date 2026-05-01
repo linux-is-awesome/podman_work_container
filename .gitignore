@@ -1,3 +1,4 @@
 config/vpn.env
 containers/
 certs/host/*.pem
+.cursor/
