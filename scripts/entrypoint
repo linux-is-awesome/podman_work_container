@@ -11,8 +11,8 @@ if [[ -f "${VPN_ENV_FILE}" ]]; then
   source "${VPN_ENV_FILE}"
 fi
 
-: "${VPN_CONN:=vrp}"
-: "${VPN_CHILD:=vrp-child}"
+: "${VPN_CONN:=default}"
+: "${VPN_CHILD:=default-child}"
 : "${VPN_SERVER:?Set VPN_SERVER in ${VPN_ENV_FILE}}"
 : "${VPN_REMOTE_ID:?Set VPN_REMOTE_ID in ${VPN_ENV_FILE}}"
 : "${VPN_USERNAME:?Set VPN_USERNAME in ${VPN_ENV_FILE}}"

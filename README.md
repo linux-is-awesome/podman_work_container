@@ -1,6 +1,6 @@
-# work_container
+# Podman Work Container
 
-Single Podman container with:
+Single Podman container (`work_container` image and service) with:
 - StrongSwan VPN client (inside the container)
 - Salesforce CLI (`sf`)
 - Google Chrome
@@ -10,17 +10,11 @@ The host does **not** need to be connected to VPN.
 The container uses a kill-switch policy: if VPN is not up, container egress stays blocked.
 Scripts use `sudo podman` (rootful mode), required for reliable IPsec behavior.
 
-## 1) Ubuntu 25.10 packages to install on host
+## 1) Packages to install on host (Debian-based)
 
 ```bash
 sudo apt update
 sudo apt install -y podman uidmap slirp4netns fuse-overlayfs xauth
-```
-
-For X11 GUI access from container apps:
-
-```bash
-xhost +si:localuser:$USER
 ```
 
 ## 2) Install/Update on host
@@ -36,10 +30,11 @@ This command will:
 - copy latest build archive to `~/.containers` (old versions there are removed)
 - install/update desktop entries in `~/.local/share/applications`
 - install `sf`/`sfdx` wrapper binaries in `/usr/local/bin` to use container CLI
+- install `work-shell` at `/usr/local/bin/work-shell` (run on the host for an interactive shell in the running container)
 - install a sudoers rule for passwordless `podman` (required for desktop launchers and `./start app ...`)
 - install/update system service `work_container.service` (on-demand start via app runner)
 
-After first install, `sf`/`sfdx` are available as system binaries.
+After first install, `sf`/`sfdx` are available as system binaries. Run `work-shell` from the host for an interactive shell in the container; if it is not running, the wrapper restarts `work_container.service` first.
 
 To remove integration:
 
@@ -181,26 +176,11 @@ No image rebuild needed for VPN config changes.
 
 ## 6) Update packages after image is already built
 
-### Recommended: rebuild image
-
-Rebuilding is cleaner and reproducible:
+Rebuild the image so changes stay reproducible:
 
 ```bash
 ./start build
 ```
-
-### Helper script
-
-Use the included helper:
-
-```bash
-./start update
-```
-
-This always:
-- loads the newest build archive from `containers/`
-- updates APT packages and refreshes Salesforce CLI (`sf`) in that image
-- creates a new build version archive in `containers/`
 
 ## 7) Portable single-file image
 
@@ -229,23 +209,5 @@ Your scripts already keep portable archives at:
 - `service-start` runs with `apparmor=unconfined` to allow DBus access from container apps.
 - VPN credentials are stored in `config/vpn.env` on host, not baked into image.
 - If VPN negotiation fails, entrypoint exits and internet remains blocked for the container process.
-- Use `./start` as the single entry point; it can run build/run/update/service/exec-in commands.
+- Use `./start` as the single entry point; it can run build/run/service/exec-in commands.
 - `./start` with no args opens an interactive selection menu.
-
-## 8) Desktop launchers on host
-
-Install user-level desktop entries:
-
-```bash
-./start install-desktop
-```
-
-This installs launchers into:
-
-`~/.local/share/applications`
-
-Created entries:
-- `Google Chrome (Work)`
-- `Firefox (Work)`
-
-They run apps from the running service container through `./start`, so traffic still goes via container VPN.
