@@ -49,6 +49,12 @@ if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
   exit 1
 fi
 
+if [[ -f "${CONFIG_DIR}/proxy.env" ]]; then
+  # shellcheck disable=SC1090
+  source "${CONFIG_DIR}/proxy.env"
+fi
+NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
+
 LATEST_IMAGE="$(find_latest_image "${IMAGE_DIR}")"
 if [[ -z "${LATEST_IMAGE}" ]]; then
   echo "No built image files found in ${IMAGE_DIR}/. Run ./start build first." >&2
@@ -126,5 +132,7 @@ prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "$
   -v "/etc/group:/etc/group:ro" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
   -e "PULSE_SERVER=unix:/run/user/$(id -u)/pulse/native" \
+  -e "WORK_CONTAINER_NODE_PROXY_PORT=${NODE_PROXY_PORT}" \
+  -p "127.0.0.1:${NODE_PROXY_PORT}:${NODE_PROXY_PORT}" \
   "${DISPLAY_ARGS[@]}" \
   "${IMAGE_NAME}" "${CMD[@]}"

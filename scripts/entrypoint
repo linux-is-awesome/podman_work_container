@@ -4,6 +4,8 @@ set -euo pipefail
 CONFIG_DIR="${WORK_CONTAINER_CONFIG_DIR:-/config}"
 VPN_ENV_FILE="${WORK_CONTAINER_VPN_ENV_FILE:-${CONFIG_DIR}/vpn.env}"
 VPN_TEMPLATE_FILE="${WORK_CONTAINER_SWANCTL_TEMPLATE:-${CONFIG_DIR}/swanctl.conf.template}"
+PROXY_TEMPLATE_FILE="${WORK_CONTAINER_TINYPROXY_TEMPLATE:-${CONFIG_DIR}/tinyproxy.conf.template}"
+PROXY_CONFIG_FILE="${WORK_CONTAINER_TINYPROXY_CONFIG:-/etc/tinyproxy/tinyproxy.conf}"
 PROJECT_CERTS_DIR="${WORK_CONTAINER_PROJECT_CERTS_DIR:-/project-certs}"
 
 if [[ -f "${VPN_ENV_FILE}" ]]; then
@@ -29,6 +31,9 @@ fi
 
 IPSEC_BIN="$(command -v ipsec)"
 SWANCTL_BIN="$(command -v swanctl)"
+TINYPROXY_BIN="$(command -v tinyproxy || true)"
+NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
+PROXY_STATUS_LINE="HTTP proxy: unavailable"
 
 DEFAULT_IFACE="$(ip route show default | awk '/default/ {print $5; exit}')"
 if [[ -z "${DEFAULT_IFACE}" ]]; then
@@ -61,7 +66,7 @@ if compgen -G "/etc/ssl/certs/*.pem" >/dev/null; then
   cp -f /etc/ssl/certs/*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
 fi
 
-echo "[work_container] Applying kill-switch firewall rules..."
+echo "Applying kill-switch firewall rules..."
 iptables -F
 iptables -t nat -F
 iptables -X
@@ -73,16 +78,23 @@ iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p tcp --dport "${NODE_PROXY_PORT}" -j ACCEPT
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 4500 -j ACCEPT
+iptables -A OUTPUT -m policy --pol ipsec --dir out -j ACCEPT
+iptables -A INPUT -m policy --pol ipsec --dir in -j ACCEPT
 
-echo "[work_container] Starting strongSwan..."
+echo "Starting strongSwan..."
 "${IPSEC_BIN}" start
 sleep 1
 
-echo "[work_container] Loading and initiating ${VPN_CONN}..."
-"${SWANCTL_BIN}" --load-all
-"${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}"
+echo "Loading and initiating ${VPN_CONN}..."
+if ! "${SWANCTL_BIN}" --load-all; then
+  echo "Initial swanctl load failed; watchdog will keep retrying." >&2
+fi
+if ! "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}"; then
+  echo "Initial VPN initiate failed; watchdog will keep retrying." >&2
+fi
 
 for _ in $(seq 1 20); do
   if "${SWANCTL_BIN}" --list-sas | grep -q "${VPN_CONN}"; then
@@ -92,23 +104,43 @@ for _ in $(seq 1 20); do
 done
 
 if ! "${SWANCTL_BIN}" --list-sas | grep -q "${VPN_CONN}"; then
-  echo "[work_container] VPN did not come up; keeping egress blocked." >&2
-  exit 1
+  echo "VPN did not come up yet; container stays running and watchdog will keep retrying." >&2
 fi
 
-iptables -A OUTPUT -m policy --pol ipsec --dir out -j ACCEPT
-iptables -A INPUT -m policy --pol ipsec --dir in -j ACCEPT
-iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
-iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 4500 -j ACCEPT
+if [[ -n "${TINYPROXY_BIN}" ]]; then
+  if [[ ! -f "${PROXY_TEMPLATE_FILE}" ]]; then
+    echo "Missing template: ${PROXY_TEMPLATE_FILE}; HTTP proxy disabled." >&2
+  else
+    mkdir -p "$(dirname "${PROXY_CONFIG_FILE}")"
+    mkdir -p /run/tinyproxy
+    chown nobody:nogroup /run/tinyproxy
+    chmod 755 /run/tinyproxy
+    export NODE_PROXY_PORT
+    envsubst < "${PROXY_TEMPLATE_FILE}" > "${PROXY_CONFIG_FILE}"
+    chmod 644 "${PROXY_CONFIG_FILE}"
+    echo "Starting HTTP proxy on port ${NODE_PROXY_PORT}..."
+    "${TINYPROXY_BIN}" -d -c "${PROXY_CONFIG_FILE}" &
+    TINYPROXY_PID=$!
+    sleep 1
+    if ! kill -0 "${TINYPROXY_PID}" 2>/dev/null; then
+      echo "tinyproxy failed to start; container will continue without HTTP proxy." >&2
+    else
+      PROXY_STATUS_LINE="HTTP proxy: http://127.0.0.1:${NODE_PROXY_PORT}"
+    fi
+  fi
+else
+  echo "tinyproxy is unavailable; HTTP proxy disabled."
+fi
 
 PUBLIC_IP="$(curl -4 --max-time 10 -fsSL ifconfig.me 2>/dev/null || true)"
 if [[ -n "${PUBLIC_IP}" ]]; then
-  echo "[work_container] Public egress IP: ${PUBLIC_IP}"
+  echo "Public egress IP: ${PUBLIC_IP}"
 else
-  echo "[work_container] Public egress IP: unavailable"
+  echo "Public egress IP: unavailable"
 fi
+echo "${PROXY_STATUS_LINE}"
 
-echo "[work_container] Runtime status:"
+echo "Runtime status:"
 if [[ -n "${DISPLAY:-}" ]] && [[ -d /tmp/.X11-unix ]]; then
   echo "  X11: OK (DISPLAY=${DISPLAY})"
 else
@@ -139,7 +171,7 @@ else
   echo "  PulseAudio env: not set"
 fi
 
-echo "[work_container] VPN is up. Starting command: $*"
+echo "VPN is up. Starting command: $*"
 
 vpn_watchdog() {
   local failures=0
@@ -151,7 +183,7 @@ vpn_watchdog() {
       continue
     fi
 
-    echo "[work_container] VPN watchdog: CHILD_SA missing, trying to re-initiate ${VPN_CHILD}..."
+    echo "VPN watchdog: CHILD_SA missing, trying to re-initiate ${VPN_CHILD}..."
     if "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1; then
       failures=0
       continue
@@ -162,7 +194,7 @@ vpn_watchdog() {
       continue
     fi
 
-    echo "[work_container] VPN watchdog: repeated CHILD_SA failures, restarting strongSwan..."
+    echo "VPN watchdog: repeated CHILD_SA failures, restarting strongSwan..."
     "${IPSEC_BIN}" stop >/dev/null 2>&1 || true
     sleep 1
     "${IPSEC_BIN}" start >/dev/null 2>&1 || true

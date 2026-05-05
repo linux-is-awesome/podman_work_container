@@ -97,6 +97,12 @@ if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
   exit 1
 fi
 
+if [[ -f "${CONFIG_DIR}/proxy.env" ]]; then
+  # shellcheck disable=SC1090
+  source "${CONFIG_DIR}/proxy.env"
+fi
+NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
+
 wait_for_payload
 
 if [[ ! -d "${IMAGE_DIR}" ]]; then
@@ -177,8 +183,10 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   -w "${HOST_HOME}" \
   -e "XDG_RUNTIME_DIR=${HOST_RUNTIME_DIR}" \
   -e "WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}" \
+  -e "WORK_CONTAINER_NODE_PROXY_PORT=${NODE_PROXY_PORT}" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
   -e "PULSE_SERVER=unix:${HOST_RUNTIME_DIR}/pulse/native" \
+  -p "127.0.0.1:${NODE_PROXY_PORT}:${NODE_PROXY_PORT}" \
   "${DISPLAY_ARGS[@]}" \
   "${IMAGE_NAME}" sleep infinity >/dev/null
 
@@ -191,12 +199,28 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 
+PROXY_STATUS_LINE="HTTP proxy: unavailable"
+for _ in $(seq 1 20); do
+  if ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "127.0.0.1:${NODE_PROXY_PORT}$"; then
+    PROXY_STATUS_LINE="HTTP proxy: http://127.0.0.1:${NODE_PROXY_PORT}"
+    break
+  fi
+
+  PROXY_ERROR_LINE="$("${PODMAN_BIN[@]}" logs "${CONTAINER_NAME}" 2>/dev/null | awk '/tinyproxy failed to start|tinyproxy is unavailable|Missing template: .*HTTP proxy disabled/ {line=$0} END {print line}')"
+  if [[ -n "${PROXY_ERROR_LINE}" ]]; then
+    PROXY_STATUS_LINE="HTTP proxy: unavailable (${PROXY_ERROR_LINE})"
+    break
+  fi
+  sleep 1
+done
+
 echo "Service started."
 if [[ -n "${PUBLIC_IP_LINE}" ]]; then
   echo "${PUBLIC_IP_LINE}"
 else
-  echo "[work_container] Public egress IP: unavailable"
+  echo "Public egress IP: unavailable"
 fi
-echo "[start service-start] Host runtime status:"
+echo "${PROXY_STATUS_LINE}"
+echo "Host runtime status:"
 echo "${HOST_STATUS}"
 echo "Use ./start service-status to check logs/state."

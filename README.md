@@ -67,6 +67,15 @@ If needed, edit `config/vpn.env` manually later (username/password/server/option
 Optionally edit `config/swanctl.conf.template` for advanced changes.  
 This file is mounted from host, so no rebuild is required.
 
+Proxy settings are separate in `config/proxy.env` (optional).  
+Create it from template when needed:
+
+```bash
+cp config/proxy.env.template config/proxy.env
+```
+
+Proxy server template is in `config/tinyproxy.conf.template` (mounted from host).
+
 Certificate sources used by the container:
 - project snapshot: `certs/host` (from `./start sync-certs`)
 - project custom certs: `certs/custom`
@@ -173,6 +182,53 @@ Edit `config/vpn.env` and/or `config/swanctl.conf.template`, then restart contai
 ```
 
 No image rebuild needed for VPN config changes.
+
+## 5b) Route Node.js API calls via container VPN
+
+The container starts a local HTTP CONNECT proxy after VPN is up.
+
+Default host endpoint:
+
+`http://127.0.0.1:3128`
+
+Configure proxy port for the container in `config/proxy.env`:
+
+```bash
+WORK_CONTAINER_NODE_PROXY_PORT=3128
+```
+
+Then restart the container service:
+
+```bash
+./start service-stop
+./start service-start
+```
+
+Set proxy values in your Node app `.env` file:
+
+```bash
+HTTP_PROXY=http://127.0.0.1:3128
+HTTPS_PROXY=http://127.0.0.1:3128
+NO_PROXY=localhost,127.0.0.1
+```
+
+Then start your Node app normally from host.
+
+Notes:
+- proxy traffic is still subject to container VPN kill-switch rules
+- proxy listens on localhost only (`127.0.0.1`) on host
+- if VPN is not up, container exits and proxy is unavailable
+- if `config/proxy.env` is absent, default port `3128` is used
+
+How to check your Node app is using the proxy:
+- confirm proxy listener is up on host:
+  - `ss -ltnp | rg ':3128'`
+- run app with debug output from Node HTTP stack:
+  - `NODE_DEBUG=http,https <your start command>`
+  - look for connection attempts to `127.0.0.1:3128`
+- verify requests use VPN egress IP:
+  - from your app, call `https://ifconfig.me/ip`
+  - compare with `sudo podman logs work_container | rg "Public egress IP"`
 
 ## 6) Update packages after image is already built
 

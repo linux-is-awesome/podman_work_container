@@ -228,8 +228,12 @@ install_runtime_bundle() {
   sudo cp -f "${SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/image-utils"
   sudo cp -f "${SCRIPTS_DIR}/runtime-status" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
   sudo cp -f "${PROJECT_DIR}/config/swanctl.conf.template" "${RUNTIME_BASE}/config/swanctl.conf.template"
+  sudo cp -f "${PROJECT_DIR}/config/tinyproxy.conf.template" "${RUNTIME_BASE}/config/tinyproxy.conf.template"
   if [[ -f "${PROJECT_DIR}/config/vpn.env" ]]; then
     sudo cp -f "${PROJECT_DIR}/config/vpn.env" "${RUNTIME_BASE}/config/vpn.env"
+  fi
+  if [[ -f "${PROJECT_DIR}/config/proxy.env" ]]; then
+    sudo cp -f "${PROJECT_DIR}/config/proxy.env" "${RUNTIME_BASE}/config/proxy.env"
   fi
   if [[ -d "${PROJECT_DIR}/certs" ]]; then
     sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true

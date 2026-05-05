@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     strongswan \
     strongswan-swanctl \
+    tinyproxy \
     xauth \
     vainfo \
     xz-utils \
