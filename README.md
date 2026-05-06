@@ -223,6 +223,8 @@ Notes:
 How to check your Node app is using the proxy:
 - confirm proxy listener is up on host:
   - `ss -ltnp | rg ':3128'`
+- inspect proxy connection logs on host:
+  - `sudo podman logs -f work_container 2>&1 | grep -Ei 'tinyproxy|connect|request|opensock|upstream|client|closed connection'`
 - run app with debug output from Node HTTP stack:
   - `NODE_DEBUG=http,https <your start command>`
   - look for connection attempts to `127.0.0.1:3128`
