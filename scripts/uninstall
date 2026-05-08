@@ -10,6 +10,8 @@ RUNNER_BIN="/usr/local/bin/work-container-app"
 SF_WRAPPER_BIN="/usr/local/bin/sf"
 SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
 WORK_SHELL_BIN="/usr/local/bin/work-shell"
+WORK_NGROK_BIN="/usr/local/bin/work-ngrok"
+WORK_PROXY_BIN="/usr/local/bin/work-proxy"
 RUNTIME_BASE="/usr/local/lib/work_container"
 
 remove_desktop_entries() {
@@ -68,6 +70,16 @@ remove_shell_wrapper() {
   echo "Removed shell wrapper ${WORK_SHELL_BIN}"
 }
 
+remove_ngrok_wrapper() {
+  sudo rm -f "${WORK_NGROK_BIN}"
+  echo "Removed ngrok wrapper ${WORK_NGROK_BIN}"
+}
+
+remove_proxy_wrapper() {
+  sudo rm -f "${WORK_PROXY_BIN}"
+  echo "Removed proxy log wrapper ${WORK_PROXY_BIN}"
+}
+
 remove_runtime_bundle() {
   sudo rm -rf "${RUNTIME_BASE}"
   echo "Removed runtime bundle ${RUNTIME_BASE}"
@@ -82,6 +94,8 @@ remove_sudoers_rule
 remove_runner_bin
 remove_cli_wrappers
 remove_shell_wrapper
+remove_ngrok_wrapper
+remove_proxy_wrapper
 remove_runtime_bundle
 
 echo
@@ -94,5 +108,7 @@ echo "- Passwordless podman sudo rule removed"
 echo "- App runner removed (${RUNNER_BIN})"
 echo "- sf/sfdx wrappers removed (${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN})"
 echo "- shell wrapper removed (${WORK_SHELL_BIN})"
+echo "- ngrok wrapper removed (${WORK_NGROK_BIN})"
+echo "- proxy log wrapper removed (${WORK_PROXY_BIN})"
 echo "- Runtime bundle removed (${RUNTIME_BASE})"
 echo "- Local app state preserved (${HOME}/.containers/work_container)"

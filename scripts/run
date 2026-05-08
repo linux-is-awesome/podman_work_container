@@ -24,6 +24,7 @@ TTY_ARGS=("-it")
 PODMAN_BIN=(sudo podman)
 HOST_UID="$(id -u)"
 HOST_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${HOST_UID}}"
+HOST_TIMEZONE="${TZ:-}"
 
 if [[ $# -gt 0 ]] && [[ "${1}" =~ ^[0-9]{8}-[0-9]{6}$ ]]; then
   REQUESTED_VERSION="${1}"
@@ -110,6 +111,12 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
+if [[ -f /etc/localtime ]]; then
+  DISPLAY_ARGS+=("-v" "/etc/localtime:/etc/localtime:ro")
+fi
+if [[ -f /etc/timezone ]]; then
+  DISPLAY_ARGS+=("-v" "/etc/timezone:/etc/timezone:ro")
+fi
 add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOME}"
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
@@ -130,6 +137,7 @@ prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "$
   -v "${CERTS_DIR}:/project-certs:ro" \
   -v "/etc/passwd:/etc/passwd:ro" \
   -v "/etc/group:/etc/group:ro" \
+  -e "TZ=${HOST_TIMEZONE}" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
   -e "PULSE_SERVER=unix:/run/user/$(id -u)/pulse/native" \
   -e "WORK_CONTAINER_NODE_PROXY_PORT=${NODE_PROXY_PORT}" \

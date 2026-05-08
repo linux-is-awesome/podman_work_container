@@ -19,6 +19,8 @@ SYSTEM_RUNNER_BIN="/usr/local/bin/work-container-app"
 SF_WRAPPER_BIN="/usr/local/bin/sf"
 SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
 WORK_SHELL_BIN="/usr/local/bin/work-shell"
+WORK_NGROK_BIN="/usr/local/bin/work-ngrok"
+WORK_PROXY_BIN="/usr/local/bin/work-proxy"
 RUNTIME_BASE="/usr/local/lib/work_container"
 RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/scripts"
 HOME_STATE_DIR="${CURRENT_HOME}/.containers/work_container"
@@ -216,6 +218,110 @@ EOF
   echo "Installed shell wrapper: ${WORK_SHELL_BIN}"
 }
 
+install_ngrok_wrapper() {
+  cat <<EOF | sudo tee "${WORK_NGROK_BIN}" >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+SERVICE_NAME="work_container.service"
+WORK_HOME="\${HOME}/.containers/work_container"
+APP_HOME="\${WORK_HOME}/home"
+APP_CONFIG_HOME="\${APP_HOME}/.config"
+APP_CACHE_HOME="\${APP_HOME}/.cache"
+APP_DATA_HOME="\${APP_HOME}/.local/share"
+
+if [[ \$# -lt 1 ]]; then
+  echo "Usage:" >&2
+  echo "  work-ngrok auth <ngrok-authtoken>" >&2
+  echo "  work-ngrok <host-port> [ngrok args...]" >&2
+  exit 1
+fi
+
+MODE="\$1"
+shift || true
+
+mkdir -p "\${APP_CONFIG_HOME}/ngrok" "\${APP_CACHE_HOME}" "\${APP_DATA_HOME}"
+
+if [[ "\${MODE}" == "auth" ]]; then
+  if [[ \$# -ne 1 ]]; then
+    echo "Usage: work-ngrok auth <ngrok-authtoken>" >&2
+    exit 1
+  fi
+
+  exec sudo podman exec -it \
+    -e "HOME=\${APP_HOME}" \
+    -e "XDG_CONFIG_HOME=\${APP_CONFIG_HOME}" \
+    -e "XDG_CACHE_HOME=\${APP_CACHE_HOME}" \
+    -e "XDG_DATA_HOME=\${APP_DATA_HOME}" \
+    work_container ngrok config add-authtoken "\$1"
+fi
+
+HOST_PORT="\${MODE}"
+
+if [[ ! "\${HOST_PORT}" =~ ^[0-9]+$ ]] || (( HOST_PORT < 1 || HOST_PORT > 65535 )); then
+  echo "Invalid host port: \${HOST_PORT}" >&2
+  exit 1
+fi
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "\${SERVICE_NAME}"
+fi
+
+for _ in \$(seq 1 30); do
+  if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+    break
+  fi
+  sleep 1
+done
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  echo "work_container is not running." >&2
+  exit 1
+fi
+
+TARGET_HOST="10.88.0.1"
+if sudo podman exec work_container sh -lc 'getent hosts host.containers.internal >/dev/null 2>&1'; then
+  TARGET_HOST="host.containers.internal"
+fi
+
+exec sudo podman exec -it \
+  -e "HOME=\${APP_HOME}" \
+  -e "XDG_CONFIG_HOME=\${APP_CONFIG_HOME}" \
+  -e "XDG_CACHE_HOME=\${APP_CACHE_HOME}" \
+  -e "XDG_DATA_HOME=\${APP_DATA_HOME}" \
+  work_container ngrok http "http://\${TARGET_HOST}:\${HOST_PORT}" "\$@"
+EOF
+  sudo chmod 755 "${WORK_NGROK_BIN}"
+  echo "Installed ngrok wrapper: ${WORK_NGROK_BIN}"
+}
+
+install_proxy_wrapper() {
+  cat <<'EOF' | sudo tee "${WORK_PROXY_BIN}" >/dev/null
+#!/usr/bin/env bash
+set -euo pipefail
+SERVICE_NAME="work_container.service"
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "${SERVICE_NAME}"
+fi
+
+for _ in $(seq 1 30); do
+  if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+    break
+  fi
+  sleep 1
+done
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  echo "work_container is not running." >&2
+  exit 1
+fi
+
+exec sudo podman logs -f work_container 2>&1 | grep -Ei 'tinyproxy|connect|request|opensock|upstream|client|closed connection'
+EOF
+  sudo chmod 755 "${WORK_PROXY_BIN}"
+  echo "Installed proxy log wrapper: ${WORK_PROXY_BIN}"
+}
+
 install_runtime_bundle() {
   sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config" "${RUNTIME_BASE}/certs"
   sudo cp -f "${SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-start"
@@ -320,6 +426,8 @@ install_runtime_bundle
 install_runner_bin
 install_cli_wrappers
 install_shell_wrapper
+install_ngrok_wrapper
+install_proxy_wrapper
 WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${SCRIPTS_DIR}/install-desktop"
 install_sudoers_rule
 install_systemd_service
@@ -332,5 +440,7 @@ echo "- Runtime bundle installed: ${RUNTIME_BASE}"
 echo "- App runner installed: ${SYSTEM_RUNNER_BIN}"
 echo "- sf/sfdx wrappers installed: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
 echo "- shell wrapper installed: ${WORK_SHELL_BIN}"
+echo "- ngrok wrapper installed: ${WORK_NGROK_BIN}"
+echo "- proxy log wrapper installed: ${WORK_PROXY_BIN}"
 echo "- Passwordless sudo for podman/systemctl-start/restart installed (${SUDOERS_PATH})"
 echo "- Service installed and restarted: ${SERVICE_NAME}"

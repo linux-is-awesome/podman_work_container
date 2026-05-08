@@ -27,6 +27,7 @@ HOST_GID="${WORK_CONTAINER_HOST_GID:-$(id -g)}"
 HOST_RUNTIME_DIR="${WORK_CONTAINER_HOST_RUNTIME_DIR:-/run/user/${HOST_UID}}"
 IMAGE_DIR="${WORK_CONTAINER_IMAGE_DIR:-${IMAGE_DIR}}"
 HOST_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+HOST_TIMEZONE="${TZ:-}"
 WAIT_FOR_GUI="${WORK_CONTAINER_WAIT_FOR_GUI:-0}"
 WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-180}"
 WAIT_FOR_PAYLOAD="${WORK_CONTAINER_WAIT_FOR_PAYLOAD:-1}"
@@ -157,6 +158,12 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
+if [[ -f /etc/localtime ]]; then
+  DISPLAY_ARGS+=("-v" "/etc/localtime:/etc/localtime:ro")
+fi
+if [[ -f /etc/timezone ]]; then
+  DISPLAY_ARGS+=("-v" "/etc/timezone:/etc/timezone:ro")
+fi
 add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOST_HOME}"
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOST_HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
@@ -183,6 +190,7 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   -w "${HOST_HOME}" \
   -e "XDG_RUNTIME_DIR=${HOST_RUNTIME_DIR}" \
   -e "WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}" \
+  -e "TZ=${HOST_TIMEZONE}" \
   -e "WORK_CONTAINER_NODE_PROXY_PORT=${NODE_PROXY_PORT}" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
   -e "PULSE_SERVER=unix:${HOST_RUNTIME_DIR}/pulse/native" \

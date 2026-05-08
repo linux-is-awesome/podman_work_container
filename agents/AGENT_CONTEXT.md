@@ -25,6 +25,7 @@
 - Proxy support is Node-focused via tinyproxy on host-local port (default `3128`), configurable through `config/proxy.env`.
 - Proxy template is `config/tinyproxy.conf.template`; runtime proxy config is rendered under `/etc/tinyproxy/tinyproxy.conf` (not `/tmp`).
 - `service-start` and `service-status` should report real proxy status (based on host listening socket), not just configured endpoint text.
+- VPN kill-switch in `scripts/entrypoint` allows outbound TCP only to the container default gateway (host on Podman bridge) and adds a `to <gateway>/32 lookup main` `ip rule` exception so strongSwan policy routing (table 220) does not hijack host-dev traffic.
 
 ## Font/GTK Strategy (Current)
 - Keep host font/fontconfig mounts in `scripts/host-mounts`, including:

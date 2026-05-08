@@ -35,9 +35,24 @@ TINYPROXY_BIN="$(command -v tinyproxy || true)"
 NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
 PROXY_STATUS_LINE="HTTP proxy: unavailable"
 
+ensure_ip_rule_to_main() {
+  local target_ip="$1"
+  local pref="$2"
+  local rule="to ${target_ip}/32 lookup main"
+  if ip rule show | grep -Fq "${rule}"; then
+    return
+  fi
+  ip rule add pref "${pref}" to "${target_ip}/32" lookup main
+}
+
 DEFAULT_IFACE="$(ip route show default | awk '/default/ {print $5; exit}')"
 if [[ -z "${DEFAULT_IFACE}" ]]; then
   echo "Could not detect default network interface" >&2
+  exit 1
+fi
+HOST_GATEWAY_IP="$(ip route show default | awk '/default/ {print $3; exit}')"
+if [[ -z "${HOST_GATEWAY_IP}" ]]; then
+  echo "Could not detect default gateway IP" >&2
   exit 1
 fi
 
@@ -79,10 +94,15 @@ iptables -A OUTPUT -o lo -j ACCEPT
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A INPUT -p tcp --dport "${NODE_PROXY_PORT}" -j ACCEPT
+# Allow TCP to host bridge gateway for dev servers / Chrome.
+iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${HOST_GATEWAY_IP}" -p tcp -j ACCEPT
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
 iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 4500 -j ACCEPT
 iptables -A OUTPUT -m policy --pol ipsec --dir out -j ACCEPT
 iptables -A INPUT -m policy --pol ipsec --dir in -j ACCEPT
+
+# Keep host-bound traffic on the bridge route (main table), not VPN policy table.
+ensure_ip_rule_to_main "${HOST_GATEWAY_IP}" 100
 
 echo "Starting strongSwan..."
 "${IPSEC_BIN}" start

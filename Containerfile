@@ -58,6 +58,18 @@ RUN curl -fsSL https://developer.salesforce.com/media/salesforce-cli/sf/channels
     && ln -s /opt/sf/bin/sf /usr/local/bin/sf \
     && rm -f /tmp/sf.tar.xz
 
+# Install ngrok CLI.
+RUN arch="$(dpkg --print-architecture)" \
+    && case "${arch}" in \
+      amd64) ngrok_pkg="ngrok-v3-stable-linux-amd64.tgz" ;; \
+      arm64) ngrok_pkg="ngrok-v3-stable-linux-arm64.tgz" ;; \
+      *) echo "Unsupported architecture for ngrok: ${arch}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL "https://bin.equinox.io/c/bNyj1mQVY4c/${ngrok_pkg}" -o /tmp/ngrok.tgz \
+    && tar -xzf /tmp/ngrok.tgz -C /usr/local/bin ngrok \
+    && chmod 755 /usr/local/bin/ngrok \
+    && rm -f /tmp/ngrok.tgz
+
 COPY scripts/entrypoint /usr/local/bin/work_container-entrypoint
 RUN chmod +x /usr/local/bin/work_container-entrypoint
 
