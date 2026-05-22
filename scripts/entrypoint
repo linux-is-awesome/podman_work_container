@@ -56,6 +56,11 @@ if [[ -z "${HOST_GATEWAY_IP}" ]]; then
   exit 1
 fi
 
+CONTAINER_IFACE_MTU="${WORK_CONTAINER_IFACE_MTU:-1400}"
+if ip link set dev "${DEFAULT_IFACE}" mtu "${CONTAINER_IFACE_MTU}" 2>/dev/null; then
+  echo "Set ${DEFAULT_IFACE} MTU to ${CONTAINER_IFACE_MTU} (IPsec/Podman path)"
+fi
+
 VPN_SERVER_IP="$(getent ahostsv4 "${VPN_SERVER}" | awk '{print $1; exit}')"
 if [[ -z "${VPN_SERVER_IP}" ]]; then
   echo "Could not resolve VPN_SERVER=${VPN_SERVER}" >&2
@@ -81,51 +86,154 @@ if compgen -G "/etc/ssl/certs/*.pem" >/dev/null; then
   cp -f /etc/ssl/certs/*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
 fi
 
-echo "Applying kill-switch firewall rules..."
-iptables -F
-iptables -t nat -F
-iptables -X
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT DROP
+apply_killswitch_firewall() {
+  echo "Applying kill-switch firewall rules..."
 
-iptables -A INPUT -i lo -j ACCEPT
-iptables -A OUTPUT -o lo -j ACCEPT
-iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -A INPUT -p tcp --dport "${NODE_PROXY_PORT}" -j ACCEPT
-# Allow TCP to host bridge gateway for dev servers / Chrome.
-iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${HOST_GATEWAY_IP}" -p tcp -j ACCEPT
-iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
-iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 4500 -j ACCEPT
-iptables -A OUTPUT -m policy --pol ipsec --dir out -j ACCEPT
-iptables -A INPUT -m policy --pol ipsec --dir in -j ACCEPT
+  # IPv4 kill-switch (same policy as original design):
+  # - Internet only via IPsec policy match (full tunnel).
+  # - IKE only as UDP/500,5000 to VPN_SERVER_IP on the bridge iface.
+  # - Host bridge gateway TCP in/out for: tinyproxy (published port), ngrok http backend
+  #   (container -> 10.88.0.1:<host-port>), dev/Chrome host relays.
+  # - Node HTTP proxy: INPUT dport NODE_PROXY_PORT; upstream uses IPsec like any app.
+  iptables -F
+  iptables -t nat -F
+  iptables -X
+  iptables -P INPUT DROP
+  iptables -P FORWARD DROP
+  iptables -P OUTPUT DROP
+
+  iptables -A INPUT -i lo -j ACCEPT
+  iptables -A OUTPUT -o lo -j ACCEPT
+  iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  iptables -A INPUT -p tcp --dport "${NODE_PROXY_PORT}" -j ACCEPT
+  # Outbound TCP to bridge gateway only (host dev/Chrome, ngrok backend); not general internet.
+  iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${HOST_GATEWAY_IP}" -p tcp -j ACCEPT
+  iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 500 -j ACCEPT
+  iptables -A OUTPUT -o "${DEFAULT_IFACE}" -d "${VPN_SERVER_IP}" -p udp --dport 4500 -j ACCEPT
+  iptables -A OUTPUT -m policy --pol ipsec --dir out -j ACCEPT
+  iptables -A INPUT -m policy --pol ipsec --dir in -j ACCEPT
+
+  # Mangle: clamp TCP MSS on IPsec egress (kernel-netlink.mss handles SA path; INPUT policy match unsupported here).
+  iptables -t mangle -F
+  iptables -t mangle -A OUTPUT -m policy --pol ipsec --dir out -p tcp -m tcp \
+    --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+
+  # --- IPv6: separate stack; DROP all (iptables does not filter IPv6). ---
+  if command -v ip6tables >/dev/null 2>&1; then
+    ip6tables -F
+    ip6tables -t mangle -F 2>/dev/null || true
+    ip6tables -t nat -F 2>/dev/null || true
+    ip6tables -X 2>/dev/null || true
+    ip6tables -P INPUT DROP
+    ip6tables -P FORWARD DROP
+    ip6tables -P OUTPUT DROP
+    ip6tables -A INPUT -i lo -j ACCEPT
+    ip6tables -A OUTPUT -o lo -j ACCEPT
+  fi
+
+  # Prefer IPv4 in apps; sysctl from podman run is the primary off switch.
+  if [[ -w /proc/sys/net/ipv6/conf/all/disable_ipv6 ]]; then
+    echo 1 >/proc/sys/net/ipv6/conf/all/disable_ipv6
+    echo 1 >/proc/sys/net/ipv6/conf/default/disable_ipv6
+  fi
+}
+
+apply_killswitch_firewall
 
 # Keep host-bound traffic on the bridge route (main table), not VPN policy table.
 ensure_ip_rule_to_main "${HOST_GATEWAY_IP}" 100
+
+vpn_child_installed() {
+  "${SWANCTL_BIN}" --list-sas 2>/dev/null | grep -qE "${VPN_CHILD}:.*INSTALLED|${VPN_CHILD}\{"
+}
+
+vpn_dns_ready() {
+  getent ahostsv4 one.one.one.one >/dev/null 2>&1
+}
+
+vpn_try_initiate() {
+  "${SWANCTL_BIN}" --load-all >/dev/null 2>&1 || return 1
+  "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1
+}
+
+vpn_wait_ready() {
+  local max_wait="${1:-90}"
+  local i=0
+  while (( i < max_wait )); do
+    if vpn_child_installed && vpn_dns_ready; then
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  return 1
+}
+
+vpn_watchdog() {
+  local failures=0
+  local interval=5
+  while true; do
+    if vpn_child_installed && vpn_dns_ready; then
+      failures=0
+      interval=30
+      sleep "${interval}"
+      continue
+    fi
+
+    if vpn_child_installed; then
+      echo "VPN watchdog: CHILD_SA up but DNS not working, re-initiating ${VPN_CHILD}..."
+      "${SWANCTL_BIN}" --terminate --ike "${VPN_CONN}" >/dev/null 2>&1 || true
+      sleep 2
+    else
+      echo "VPN watchdog: CHILD_SA missing, trying to re-initiate ${VPN_CHILD}..."
+    fi
+
+    if vpn_try_initiate; then
+      sleep 3
+      if vpn_child_installed && vpn_dns_ready; then
+        failures=0
+        interval=30
+        sleep "${interval}"
+        continue
+      fi
+    fi
+
+    failures=$((failures + 1))
+    if (( failures >= 3 )); then
+      echo "VPN watchdog: repeated failures, restarting strongSwan..."
+      "${IPSEC_BIN}" stop >/dev/null 2>&1 || true
+      sleep 1
+      "${IPSEC_BIN}" start >/dev/null 2>&1 || true
+      sleep 1
+      vpn_try_initiate || true
+      sleep 3
+      failures=0
+    fi
+
+    interval=5
+    sleep "${interval}"
+  done
+}
 
 echo "Starting strongSwan..."
 "${IPSEC_BIN}" start
 sleep 1
 
 echo "Loading and initiating ${VPN_CONN}..."
-if ! "${SWANCTL_BIN}" --load-all; then
-  echo "Initial swanctl load failed; watchdog will keep retrying." >&2
-fi
-if ! "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}"; then
+if ! vpn_try_initiate; then
   echo "Initial VPN initiate failed; watchdog will keep retrying." >&2
 fi
 
-for _ in $(seq 1 20); do
-  if "${SWANCTL_BIN}" --list-sas | grep -q "${VPN_CONN}"; then
-    break
-  fi
-  sleep 1
-done
-
-if ! "${SWANCTL_BIN}" --list-sas | grep -q "${VPN_CONN}"; then
-  echo "VPN did not come up yet; container stays running and watchdog will keep retrying." >&2
+VPN_READY=0
+if vpn_wait_ready 90; then
+  VPN_READY=1
+else
+  echo "VPN not ready yet (tunnel or DNS); watchdog will keep retrying." >&2
 fi
+
+# Start watchdog only after the first connect attempt (avoids false "CHILD_SA missing" while IKE is still starting).
+vpn_watchdog &
 
 if [[ -n "${TINYPROXY_BIN}" ]]; then
   if [[ ! -f "${PROXY_TEMPLATE_FILE}" ]]; then
@@ -152,7 +260,10 @@ else
   echo "tinyproxy is unavailable; HTTP proxy disabled."
 fi
 
-PUBLIC_IP="$(curl -4 --max-time 10 -fsSL ifconfig.me 2>/dev/null || true)"
+PUBLIC_IP=""
+if (( VPN_READY )); then
+  PUBLIC_IP="$(curl -4 --max-time 10 -fsSL ifconfig.me 2>/dev/null || true)"
+fi
 if [[ -n "${PUBLIC_IP}" ]]; then
   echo "Public egress IP: ${PUBLIC_IP}"
 else
@@ -191,39 +302,10 @@ else
   echo "  PulseAudio env: not set"
 fi
 
-echo "VPN is up. Starting command: $*"
+if (( VPN_READY )); then
+  echo "VPN is up (tunnel and DNS OK). Starting command: $*"
+else
+  echo "VPN not ready yet; watchdog will keep retrying. Starting command: $*"
+fi
 
-vpn_watchdog() {
-  local failures=0
-  while true; do
-    sleep 30
-
-    if "${SWANCTL_BIN}" --list-sas 2>/dev/null | grep -q "${VPN_CHILD}"; then
-      failures=0
-      continue
-    fi
-
-    echo "VPN watchdog: CHILD_SA missing, trying to re-initiate ${VPN_CHILD}..."
-    if "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1; then
-      failures=0
-      continue
-    fi
-
-    failures=$((failures + 1))
-    if (( failures < 3 )); then
-      continue
-    fi
-
-    echo "VPN watchdog: repeated CHILD_SA failures, restarting strongSwan..."
-    "${IPSEC_BIN}" stop >/dev/null 2>&1 || true
-    sleep 1
-    "${IPSEC_BIN}" start >/dev/null 2>&1 || true
-    sleep 1
-    "${SWANCTL_BIN}" --load-all >/dev/null 2>&1 || true
-    "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1 || true
-    failures=0
-  done
-}
-
-vpn_watchdog &
 exec "$@"
