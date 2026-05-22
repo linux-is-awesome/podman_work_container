@@ -91,7 +91,7 @@ apply_killswitch_firewall() {
 
   # IPv4 kill-switch (same policy as original design):
   # - Internet only via IPsec policy match (full tunnel).
-  # - IKE only as UDP/500,5000 to VPN_SERVER_IP on the bridge iface.
+  # - IKE only as UDP/500 and UDP/4500 to VPN_SERVER_IP on the bridge iface.
   # - Host bridge gateway TCP in/out for: tinyproxy (published port), ngrok http backend
   #   (container -> 10.88.0.1:<host-port>), dev/Chrome host relays.
   # - Node HTTP proxy: INPUT dport NODE_PROXY_PORT; upstream uses IPsec like any app.
@@ -144,6 +144,19 @@ apply_killswitch_firewall
 # Keep host-bound traffic on the bridge route (main table), not VPN policy table.
 ensure_ip_rule_to_main "${HOST_GATEWAY_IP}" 100
 
+# VPN status messages — wording lives here only.
+readonly VPN_MSG_EGRESS_UNAVAILABLE='Public egress IP: unavailable'
+readonly VPN_MSG_EGRESS_FORMAT='Public egress IP: %s'
+readonly VPN_MSG_WATCHDOG_PREFIX='VPN watchdog: '
+readonly VPN_MSG_NETWORK_OK='VPN watchdog: network OK (tunnel and DNS working again)'
+readonly VPN_MSG_CHILD_MISSING='VPN watchdog: CHILD_SA missing, trying to re-initiate %s...'
+readonly VPN_MSG_DNS_FAIL='VPN watchdog: CHILD_SA up but DNS not working, re-initiating %s...'
+readonly VPN_MSG_RESTART_STRONGSWAN='VPN watchdog: repeated failures, restarting strongSwan...'
+readonly VPN_MSG_INITIATE_FAILED='Initial VPN initiate failed; watchdog will keep retrying.'
+readonly VPN_MSG_NOT_READY_STARTUP='VPN not ready yet (tunnel or DNS); watchdog will keep retrying.'
+readonly VPN_MSG_UP_START='VPN is up (tunnel and DNS OK). Starting command: %s'
+readonly VPN_MSG_NOT_READY_START='VPN not ready yet; watchdog will keep retrying. Starting command: %s'
+
 vpn_child_installed() {
   "${SWANCTL_BIN}" --list-sas 2>/dev/null | grep -qE "${VPN_CHILD}:.*INSTALLED|${VPN_CHILD}\{"
 }
@@ -152,16 +165,57 @@ vpn_dns_ready() {
   getent ahostsv4 one.one.one.one >/dev/null 2>&1
 }
 
+vpn_is_ready() {
+  vpn_child_installed && vpn_dns_ready
+}
+
+vpn_fetch_public_egress_ip() {
+  curl -4 --max-time 10 -fsSL ifconfig.me 2>/dev/null || true
+}
+
+vpn_status_egress() {
+  local prefix="${1:-}"
+  local ip="${2-}"
+  if [[ -n "${ip}" ]]; then
+    # shellcheck disable=SC2059
+    printf '%s'"${VPN_MSG_EGRESS_FORMAT}"'\n' "${prefix}" "${ip}"
+  else
+    printf '%s%s\n' "${prefix}" "${VPN_MSG_EGRESS_UNAVAILABLE}"
+  fi
+}
+
+# prefix: optional log prefix; do_fetch: 1=curl ifconfig.me, 0=report unavailable without curl.
+vpn_log_public_egress() {
+  local prefix="${1:-}"
+  local do_fetch="${2:-1}"
+  local ip=""
+  if (( do_fetch )); then
+    ip="$(vpn_fetch_public_egress_ip)"
+  fi
+  vpn_status_egress "${prefix}" "${ip}"
+}
+
+vpn_log_watchdog_recovery() {
+  echo "${VPN_MSG_NETWORK_OK}"
+  vpn_log_public_egress "${VPN_MSG_WATCHDOG_PREFIX}" 1
+}
+
 vpn_try_initiate() {
   "${SWANCTL_BIN}" --load-all >/dev/null 2>&1 || return 1
   "${SWANCTL_BIN}" --initiate --child "${VPN_CHILD}" >/dev/null 2>&1
+}
+
+vpn_try_initiate_and_wait() {
+  vpn_try_initiate || return 1
+  sleep 3
+  vpn_is_ready
 }
 
 vpn_wait_ready() {
   local max_wait="${1:-90}"
   local i=0
   while (( i < max_wait )); do
-    if vpn_child_installed && vpn_dns_ready; then
+    if vpn_is_ready; then
       return 0
     fi
     sleep 1
@@ -173,41 +227,62 @@ vpn_wait_ready() {
 vpn_watchdog() {
   local failures=0
   local interval=5
+  local was_healthy="${1:-0}"
+
+  watchdog_recovered() {
+    vpn_log_watchdog_recovery
+    was_healthy=1
+    failures=0
+    interval=30
+    sleep "${interval}"
+  }
+
   while true; do
-    if vpn_child_installed && vpn_dns_ready; then
+    if vpn_is_ready; then
+      if (( ! was_healthy )); then
+        watchdog_recovered
+        continue
+      fi
       failures=0
       interval=30
       sleep "${interval}"
       continue
     fi
 
+    was_healthy=0
+
     if vpn_child_installed; then
-      echo "VPN watchdog: CHILD_SA up but DNS not working, re-initiating ${VPN_CHILD}..."
+      # shellcheck disable=SC2059
+      printf "${VPN_MSG_DNS_FAIL}\n" "${VPN_CHILD}"
       "${SWANCTL_BIN}" --terminate --ike "${VPN_CONN}" >/dev/null 2>&1 || true
       sleep 2
     else
-      echo "VPN watchdog: CHILD_SA missing, trying to re-initiate ${VPN_CHILD}..."
+      # shellcheck disable=SC2059
+      printf "${VPN_MSG_CHILD_MISSING}\n" "${VPN_CHILD}"
     fi
 
-    if vpn_try_initiate; then
-      sleep 3
-      if vpn_child_installed && vpn_dns_ready; then
-        failures=0
-        interval=30
-        sleep "${interval}"
+    if vpn_try_initiate_and_wait; then
+      if (( ! was_healthy )); then
+        watchdog_recovered
         continue
       fi
+      failures=0
+      interval=30
+      sleep "${interval}"
+      continue
     fi
 
     failures=$((failures + 1))
     if (( failures >= 3 )); then
-      echo "VPN watchdog: repeated failures, restarting strongSwan..."
+      echo "${VPN_MSG_RESTART_STRONGSWAN}"
       "${IPSEC_BIN}" stop >/dev/null 2>&1 || true
       sleep 1
       "${IPSEC_BIN}" start >/dev/null 2>&1 || true
       sleep 1
-      vpn_try_initiate || true
-      sleep 3
+      if vpn_try_initiate_and_wait; then
+        watchdog_recovered
+        continue
+      fi
       failures=0
     fi
 
@@ -222,18 +297,18 @@ sleep 1
 
 echo "Loading and initiating ${VPN_CONN}..."
 if ! vpn_try_initiate; then
-  echo "Initial VPN initiate failed; watchdog will keep retrying." >&2
+  echo "${VPN_MSG_INITIATE_FAILED}" >&2
 fi
 
 VPN_READY=0
 if vpn_wait_ready 90; then
   VPN_READY=1
 else
-  echo "VPN not ready yet (tunnel or DNS); watchdog will keep retrying." >&2
+  echo "${VPN_MSG_NOT_READY_STARTUP}" >&2
 fi
 
 # Start watchdog only after the first connect attempt (avoids false "CHILD_SA missing" while IKE is still starting).
-vpn_watchdog &
+vpn_watchdog "${VPN_READY}" &
 
 if [[ -n "${TINYPROXY_BIN}" ]]; then
   if [[ ! -f "${PROXY_TEMPLATE_FILE}" ]]; then
@@ -260,15 +335,7 @@ else
   echo "tinyproxy is unavailable; HTTP proxy disabled."
 fi
 
-PUBLIC_IP=""
-if (( VPN_READY )); then
-  PUBLIC_IP="$(curl -4 --max-time 10 -fsSL ifconfig.me 2>/dev/null || true)"
-fi
-if [[ -n "${PUBLIC_IP}" ]]; then
-  echo "Public egress IP: ${PUBLIC_IP}"
-else
-  echo "Public egress IP: unavailable"
-fi
+vpn_log_public_egress "" "${VPN_READY}"
 echo "${PROXY_STATUS_LINE}"
 
 echo "Runtime status:"
@@ -303,9 +370,11 @@ else
 fi
 
 if (( VPN_READY )); then
-  echo "VPN is up (tunnel and DNS OK). Starting command: $*"
+  # shellcheck disable=SC2059
+  printf "${VPN_MSG_UP_START}\n" "$*"
 else
-  echo "VPN not ready yet; watchdog will keep retrying. Starting command: $*"
+  # shellcheck disable=SC2059
+  printf "${VPN_MSG_NOT_READY_START}\n" "$*"
 fi
 
 exec "$@"
