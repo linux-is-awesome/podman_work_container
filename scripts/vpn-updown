@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# strongSwan updown hook: apply VPN-pushed DNS to /etc/resolv.conf.
+# Podman injects host LAN DNS; with full-tunnel routing that resolver does not work.
+# The stock resolve plugin cannot replace Podman's resolv.conf mount (unlink EBUSY).
+set -euo pipefail
+
+RESOLV_CONF="${WORK_CONTAINER_RESOLV_CONF:-/etc/resolv.conf}"
+CONTAINER_IFACE_MTU="${WORK_CONTAINER_IFACE_MTU:-1400}"
+
+apply_iface_mtu() {
+  local iface="${PLUTO_INTERFACE:-}"
+  if [[ -z "${iface}" ]]; then
+    iface="$(ip route show default | awk '/default/ {print $5; exit}')"
+  fi
+  if [[ -n "${iface}" ]] && ip link set dev "${iface}" mtu "${CONTAINER_IFACE_MTU}" 2>/dev/null; then
+    echo "VPN updown: set ${iface} MTU ${CONTAINER_IFACE_MTU}"
+  fi
+}
+
+apply_vpn_dns() {
+  local servers=() i=1 var dns
+  while true; do
+    var="PLUTO_DNS4_${i}"
+    dns="${!var:-}"
+    [[ -n "${dns}" ]] || break
+    servers+=("${dns}")
+    i=$((i + 1))
+  done
+  if ((${#servers[@]} == 0)); then
+    echo "VPN updown: no PLUTO_DNS4 servers in environment" >&2
+    return 0
+  fi
+  {
+    for dns in "${servers[@]}"; do
+      printf 'nameserver %s\n' "${dns}"
+    done
+  } >"${RESOLV_CONF}"
+  echo "VPN DNS applied (${#servers[@]} server(s)): ${servers[*]}"
+}
+
+case "${PLUTO_VERB:-}" in
+  up-host|up-host-v6|up-client|up-client-v6)
+    apply_iface_mtu
+    apply_vpn_dns
+    ;;
+  down-host|down-host-v6|down-client|down-client-v6)
+    echo "VPN child down (${PLUTO_VERB}); resolv.conf unchanged until next up"
+    ;;
+esac
+
+exit 0

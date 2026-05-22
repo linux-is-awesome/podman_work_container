@@ -71,7 +71,12 @@ RUN arch="$(dpkg --print-architecture)" \
     && rm -f /tmp/ngrok.tgz
 
 COPY scripts/entrypoint /usr/local/bin/work_container-entrypoint
-RUN chmod +x /usr/local/bin/work_container-entrypoint
+COPY scripts/vpn-updown /usr/local/bin/work-container-vpn-updown
+COPY config/charon-updown-dns.conf /etc/strongswan.d/charon/zz-updown-dns.conf
+COPY config/charon-kernel-netlink-mss.conf /etc/strongswan.d/charon/zz-kernel-netlink-mss.conf
+COPY config/charon-tunnel.conf /etc/strongswan.d/charon/zz-tunnel.conf
+COPY config/gai.conf /etc/gai.conf
+RUN chmod +x /usr/local/bin/work_container-entrypoint /usr/local/bin/work-container-vpn-updown
 
 ENTRYPOINT ["/usr/local/bin/work_container-entrypoint"]
 CMD ["bash"]

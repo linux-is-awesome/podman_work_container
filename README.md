@@ -7,7 +7,7 @@ Single Podman container (`work_container` image and service) with:
 - Firefox ESR
 
 The host does **not** need to be connected to VPN.  
-The container uses a kill-switch policy: if VPN is not up, container egress stays blocked.
+The container uses a kill-switch policy: if VPN is not up, container egress stays blocked. IPv4 internet traffic must match IPsec policy; IPv6 is dropped (`ip6tables` + `disable_ipv6`). TCP to the Podman bridge gateway is only for host-side dev/Chrome, not general internet egress.
 Scripts use `sudo podman` (rootful mode), required for reliable IPsec behavior.
 
 ## 1) Packages to install on host (Debian-based)
@@ -264,7 +264,7 @@ Then start your Node app normally from host.
 Notes:
 - proxy traffic is still subject to container VPN kill-switch rules
 - proxy listens on localhost only (`127.0.0.1`) on host
-- if VPN is not up, container exits and proxy is unavailable
+- if VPN is not up, proxy is unavailable until the watchdog brings the tunnel back
 - if `config/proxy.env` is absent, default port `3128` is used
 
 How to check your Node app is using the proxy:
@@ -315,6 +315,9 @@ Your scripts already keep portable archives at:
 - `service-start` and `run` mount host timezone files (`/etc/localtime`, `/etc/timezone`) and pass `TZ` so container local time matches host.
 - `service-start` runs with `apparmor=unconfined` to allow DBus access from container apps.
 - VPN credentials are stored in `config/vpn.env` on host, not baked into image.
-- If VPN negotiation fails, entrypoint exits and internet remains blocked for the container process.
+- VPN DNS is applied automatically from the gateway (`scripts/vpn-updown` on CHILD_SA up); Podman-injected host LAN DNS is not used for tunnel traffic.
+- `Public egress IP` in logs is a DNS-dependent connectivity check, not a kill-switch allowlist.
+- If VPN or DNS is not ready at startup, the container keeps running and the entrypoint watchdog retries (same behavior after a later drop).
+- Browsers can look “stuck” if apps try **IPv6** first while the tunnel is **IPv4-only**; the image disables IPv6 in the container and clamps TCP MSS for IPsec. Some sites may still be slower than on host VPN due to corporate gateway limits.
 - Use `./start` as the single entry point; it can run build/run/service/exec-in commands.
 - `./start` with no args opens an interactive selection menu.

@@ -178,6 +178,8 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   --shm-size=1g \
   --cap-add NET_ADMIN \
   --cap-add NET_RAW \
+  --sysctl net.ipv6.conf.all.disable_ipv6=1 \
+  --sysctl net.ipv6.conf.default.disable_ipv6=1 \
   --device /dev/net/tun \
   --security-opt label=disable \
   --security-opt apparmor=unconfined \
