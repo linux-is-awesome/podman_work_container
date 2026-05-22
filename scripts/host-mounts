@@ -30,3 +30,17 @@ add_host_mounts() {
     _mount_args+=("-v" "${host_home}/.config/fontconfig:${host_home}/.config/fontconfig:ro")
   fi
 }
+
+# Host /dev bind + privileged: same device nodes and hot-plug as the host (VPN unchanged).
+add_host_usb_devices() {
+  local -n _mount_args="$1"
+
+  _mount_args+=("--privileged")
+  _mount_args+=("-v" "/dev:/dev:rslave")
+
+  if [[ -S /run/pcscd/pcscd.sock ]]; then
+    _mount_args+=("-v" "/run/pcscd:/run/pcscd:rw")
+  elif [[ -S /var/run/pcscd/pcscd.sock ]]; then
+    _mount_args+=("-v" "/var/run/pcscd:/var/run/pcscd:rw")
+  fi
+}

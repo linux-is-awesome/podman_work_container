@@ -102,12 +102,6 @@ if [[ -n "${WAYLAND_DISPLAY:-}" ]] && [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
   fi
 fi
 
-if [[ -d /dev/dri ]]; then
-  DISPLAY_ARGS+=("--device" "/dev/dri:/dev/dri:rwm")
-fi
-if [[ -d /dev/snd ]]; then
-  DISPLAY_ARGS+=("--device" "/dev/snd:/dev/snd:rwm")
-fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
@@ -118,6 +112,7 @@ if [[ -f /etc/timezone ]]; then
   DISPLAY_ARGS+=("-v" "/etc/timezone:/etc/timezone:ro")
 fi
 add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOME}"
+add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
@@ -125,8 +120,6 @@ prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "$
 "${PODMAN_BIN[@]}" run --name "${CONTAINER_NAME}" --hostname "${CONTAINER_NAME}" --rm "${TTY_ARGS[@]}" \
   --network bridge \
   --group-add keep-groups \
-  --device-cgroup-rule "c 226:* rwm" \
-  --device-cgroup-rule "c 116:* rwm" \
   --shm-size=1g \
   --cap-add NET_ADMIN \
   --cap-add NET_RAW \
