@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Shared host -> work_container podman exec conventions.
+# shellcheck shell=bash
+
+# -i always (stdin for pipes/IDE); -t only when both streams are a real terminal.
+podman_exec_stdio_args() {
+  PODMAN_EXEC_STDIO=(-i)
+  if [[ -t 0 ]] && [[ -t 1 ]]; then
+    PODMAN_EXEC_STDIO+=(-t)
+  fi
+}
