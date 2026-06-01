@@ -11,6 +11,11 @@ add_host_mounts() {
     _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/google-chrome:ro")
   fi
 
+  if [[ -x "${script_dir}/vscode-work-open" ]]; then
+    _mount_args+=("-v" "${script_dir}/vscode-work-open:/usr/local/bin/vscode-work-open:ro")
+    _mount_args+=("-v" "${script_dir}/vscode-work-open:/usr/bin/code:ro")
+  fi
+
   if [[ -d /etc/fonts ]]; then
     _mount_args+=("-v" "/etc/fonts:/etc/fonts:ro")
   fi

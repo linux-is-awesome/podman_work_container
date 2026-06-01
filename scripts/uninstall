@@ -15,7 +15,7 @@ WORK_PROXY_BIN="/usr/local/bin/work-proxy"
 RUNTIME_BASE="/usr/local/lib/work_container"
 
 remove_desktop_entries() {
-  rm -f "${APP_DIR}/google-chrome-work.desktop" "${APP_DIR}/firefox-work.desktop"
+  rm -f "${APP_DIR}/google-chrome-work.desktop" "${APP_DIR}/firefox-work.desktop" "${APP_DIR}/vscode-work.desktop"
   update-desktop-database "${APP_DIR}" >/dev/null 2>&1 || true
   echo "Removed desktop entries from ${APP_DIR}"
 }

@@ -8,7 +8,7 @@ RUNNER_BIN="${WORK_CONTAINER_RUNNER_BIN:-/usr/local/bin/work-container-app}"
 
 mkdir -p "${TARGET_DIR}"
 
-for file in google-chrome-work.desktop firefox-work.desktop; do
+for file in google-chrome-work.desktop firefox-work.desktop vscode-work.desktop; do
   src="${SOURCE_DIR}/${file}"
   dst="${TARGET_DIR}/${file}"
   if [[ ! -f "${src}" ]]; then
@@ -24,3 +24,4 @@ update-desktop-database "${TARGET_DIR}" >/dev/null 2>&1 || true
 echo "Desktop launchers installed. Look for:"
 echo "- Google Chrome (Work)"
 echo "- Firefox (Work)"
+echo "- VS Code (Work)"

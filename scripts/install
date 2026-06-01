@@ -63,7 +63,7 @@ set -euo pipefail
 source /usr/local/lib/work_container/scripts/host-podman-exec
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: work-container-app <google-chrome|firefox|sf> [args...]" >&2
+  echo "Usage: work-container-app <google-chrome|firefox|vscode|sf> [args...]" >&2
   exit 1
 fi
 
@@ -124,6 +124,9 @@ case "${APP}" in
   firefox)
     CMD=(firefox-esr "$@")
     CMD+=("--class" "Firefox-work" "--name" "Firefox-work")
+    ;;
+  vscode|code)
+    CMD=(code "$@")
     ;;
   sf|sfdx)
     CMD=(sf "$@")
@@ -345,6 +348,7 @@ install_runtime_bundle() {
   sudo cp -f "${SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/service-status"
   sudo cp -f "${SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
   sudo cp -f "${SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open"
+  sudo cp -f "${SCRIPTS_DIR}/vscode-work-open" "${RUNTIME_SCRIPTS_DIR}/vscode-work-open"
   sudo cp -f "${SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-mounts"
   sudo cp -f "${SCRIPTS_DIR}/host-podman-exec" "${RUNTIME_SCRIPTS_DIR}/host-podman-exec"
   sudo cp -f "${SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings"
@@ -361,7 +365,7 @@ install_runtime_bundle() {
   if [[ -d "${PROJECT_DIR}/certs" ]]; then
     sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
   fi
-  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-podman-exec" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
+  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/vscode-work-open" "${RUNTIME_SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-podman-exec" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
   echo "Installed runtime bundle: ${RUNTIME_BASE}"
 }
 

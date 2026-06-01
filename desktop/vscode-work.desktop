@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=VS Code (Work)
+Comment=Visual Studio Code from work_container
+Exec=__RUNNER_BIN__ vscode
+Icon=code
+Terminal=false
+Categories=Development;IDE;
+StartupNotify=true
+StartupWMClass=vscode-work
