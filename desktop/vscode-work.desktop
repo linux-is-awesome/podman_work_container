@@ -8,4 +8,4 @@ Icon=code
 Terminal=false
 Categories=Development;IDE;
 StartupNotify=true
-StartupWMClass=vscode-work
+StartupWMClass=code
