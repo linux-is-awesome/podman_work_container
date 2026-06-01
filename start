@@ -35,12 +35,15 @@ run_app() {
     firefox)
       run_cmd exec-in firefox-esr "$@"
       ;;
+    vscode|code)
+      run_cmd exec-in code "$@"
+      ;;
     sf|sfdx)
       run_cmd exec-in sf "$@"
       ;;
     *)
       echo "Unknown app: ${app}" >&2
-      echo "Supported apps: google-chrome, firefox, sf" >&2
+      echo "Supported apps: google-chrome, firefox, vscode, sf" >&2
       exit 1
       ;;
   esac
@@ -51,7 +54,7 @@ print_help() {
   echo
   echo "${C_BOLD}Usage${C_RESET}"
   echo "  ./start <command> [args...]"
-  echo "  ./start app <google-chrome|firefox|sf> [args...]"
+  echo "  ./start app <google-chrome|firefox|vscode|sf> [args...]"
   echo
   echo "${C_BOLD}Commands${C_RESET}"
   echo "  ${C_GREEN}build${C_RESET}"
@@ -65,11 +68,12 @@ print_help() {
   echo "  ${C_GREEN}service-stop${C_RESET}"
   echo "  ${C_GREEN}service-status${C_RESET}"
   echo "  ${C_GREEN}exec-in${C_RESET} <command> [args...]"
-  echo "  ${C_MAGENTA}app${C_RESET} <google-chrome|firefox|sf> [args...]"
+  echo "  ${C_MAGENTA}app${C_RESET} <google-chrome|firefox|vscode|sf> [args...]"
   echo
   echo "${C_BOLD}Examples${C_RESET}"
   echo "  ./start app google-chrome"
   echo "  ./start app firefox"
+  echo "  ./start app vscode"
   echo "  ./start app sf --version"
 }
 
@@ -107,8 +111,9 @@ ${C_BOLD}${C_GREEN}Service${C_RESET}
 ${C_BOLD}${C_MAGENTA}Apps${C_RESET}
   [10] Open Google Chrome
   [11] Open Firefox
-  [12] Run Salesforce CLI (sf)
-  [13] Run custom command in service (exec-in)
+  [12] Open VS Code
+  [13] Run Salesforce CLI (sf)
+  [14] Run custom command in service (exec-in)
 
 ${C_BOLD}${C_CYAN}Other${C_RESET}
   [h] Help
@@ -135,7 +140,8 @@ EOF
       9) run_cmd service-status; pause ;;
       10) run_app google-chrome; pause ;;
       11) run_app firefox; pause ;;
-      12)
+      12) run_app vscode; pause ;;
+      13)
         read -r -p "sf args (blank=--version): " sf_args
         if [[ -n "${sf_args}" ]]; then
           # shellcheck disable=SC2206
@@ -146,7 +152,7 @@ EOF
         fi
         pause
         ;;
-      13)
+      14)
         read -r -p "Command to run inside service: " cmdline
         if [[ -n "${cmdline}" ]]; then
           # shellcheck disable=SC2206

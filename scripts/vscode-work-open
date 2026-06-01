@@ -1,0 +1,8 @@
+#!/bin/sh
+# Bind-mounted on /usr/bin/code (symlink target: /usr/share/code/bin/code).
+# Must exec the Electron binary, not bin/code (that path is this script).
+exec /usr/share/code/code \
+  --no-sandbox \
+  --disable-gpu-sandbox \
+  --ozone-platform=wayland \
+  "$@"
