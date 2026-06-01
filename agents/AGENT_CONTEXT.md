@@ -13,7 +13,7 @@
 - Keep **project scripts** and **installed runtime behavior** aligned.
 - No new runtime dependencies unless explicitly requested.
 - Use **image** terminology only (never reintroduce archive naming).
-- Avoid backward-compat fallbacks the user removed.
+- **No backward compatibility.** Never add migration shims, dual code paths, renamed-file cleanup in install/uninstall, “support old config/layout” branches, or deprecated-option handling unless the user explicitly requests it in the current session.
 
 ## Current Important Behaviors
 - `work-shell` opens shell in running container with clear `work-shell#` prompt.
@@ -29,6 +29,7 @@
 - Proxy template is `config/tinyproxy.conf.template`; runtime proxy config is rendered under `/etc/tinyproxy/tinyproxy.conf` (not `/tmp`).
 - `service-start` and `service-status` should report real proxy status (based on host listening socket), not just configured endpoint text.
 - VPN kill-switch in `scripts/entrypoint`: IPv4 default DROP; egress internet only via `-m policy --pol ipsec`; IKE UDP to `VPN_SERVER_IP`; TCP to bridge gateway for host dev/Chrome/ngrok backend only; INPUT TCP dport `NODE_PROXY_PORT` for published tinyproxy; `ip6tables` all DROP; mangle `TCPMSS --clamp-mss-to-pmtu` on IPsec OUTPUT only. Manual checks: `tests/verify-killswitch-features.sh` (see `tests/README.md`).
+- Host → container exec: `scripts/host-podman-exec` `podman_exec_stdio_args` (`-i` always; `-t` only when stdin and stdout are TTYs). Used by `exec-in`, `work-container-app`, `work-shell`, `work-ngrok`. Do not `exec` into `podman exec`/`podman logs` from wrappers—keep a host shell for signal/session teardown. Probe/helper `podman exec` calls that only read output use `-i` alone.
 
 - Devices: `scripts/host-mounts` `add_host_usb_devices` — `--privileged` and `/dev:/dev:rslave` (host hot-plug, same ACLs); optional `pcscd` socket. Wired from `service-start` and `run`. VPN kill-switch unchanged.
 

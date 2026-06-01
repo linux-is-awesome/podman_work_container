@@ -21,6 +21,7 @@ If user instructions conflict with `agents/AGENT_CONTEXT.md`, follow the user an
 
 ## Consistency rules (must follow)
 
+- **No backward compatibility.** Do not add migration shims, dual paths, install-time removal of obsolete files, or fallbacks for old names/config unless the user explicitly asks in the current session.
 - Keep behavior consistent across `run`, `service-start`, `service-status`, and installed runtime under `/usr/local/lib/work_container`.
 - For config-driven features, use the same pattern as VPN:
   - host templates/configs under `config/`

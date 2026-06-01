@@ -59,6 +59,9 @@ install_runner_bin() {
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=/dev/null
+source /usr/local/lib/work_container/scripts/host-podman-exec
+
 if [[ $# -lt 1 ]]; then
   echo "Usage: work-container-app <google-chrome|firefox|sf> [args...]" >&2
   exit 1
@@ -151,7 +154,7 @@ if [[ "${APP}" == "sf" ]] || [[ "${APP}" == "sfdx" ]]; then
     done
     HELP_CMD+=(--help)
 
-    if sudo podman exec work_container \
+    if sudo podman exec -i work_container \
       setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- \
       "${HELP_CMD[@]}" 2>/dev/null | awk '/--browser/ {found=1} END {exit found?0:1}'; then
       CMD+=(--browser chrome)
@@ -177,7 +180,8 @@ if [[ -n "${PWD:-}" ]]; then
   WORKDIR_ARGS+=(--workdir "${PWD}")
 fi
 
-sudo podman exec "${WORKDIR_ARGS[@]}" "${ENV_ARGS[@]}" work_container setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
+podman_exec_stdio_args
+sudo podman exec "${PODMAN_EXEC_STDIO[@]}" "${WORKDIR_ARGS[@]}" "${ENV_ARGS[@]}" work_container setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
 EOF
   sudo chmod 755 "${SYSTEM_RUNNER_BIN}"
   echo "Installed system runner: ${SYSTEM_RUNNER_BIN}"
@@ -202,16 +206,21 @@ install_shell_wrapper() {
   cat <<EOF | sudo tee "${WORK_SHELL_BIN}" >/dev/null
 #!/usr/bin/env bash
 set -euo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/work_container/scripts/host-podman-exec
+
 SERVICE_NAME="work_container.service"
 
 if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
   sudo systemctl restart "\${SERVICE_NAME}"
 fi
 
+podman_exec_stdio_args
 if [[ \$# -eq 0 ]]; then
-  exec sudo podman exec -it -e PS1='work-shell# ' work_container bash --noprofile --norc -i
+  sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" -e PS1='work-shell# ' work_container bash --noprofile --norc -i
 else
-  exec sudo podman exec -it work_container "\$@"
+  sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" work_container "\$@"
 fi
 EOF
   sudo chmod 755 "${WORK_SHELL_BIN}"
@@ -222,6 +231,10 @@ install_ngrok_wrapper() {
   cat <<EOF | sudo tee "${WORK_NGROK_BIN}" >/dev/null
 #!/usr/bin/env bash
 set -euo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/work_container/scripts/host-podman-exec
+
 SERVICE_NAME="work_container.service"
 WORK_HOME="\${HOME}/.containers/work_container"
 APP_HOME="\${WORK_HOME}/home"
@@ -247,12 +260,14 @@ if [[ "\${MODE}" == "auth" ]]; then
     exit 1
   fi
 
-  exec sudo podman exec -it \
+  podman_exec_stdio_args
+  sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" \
     -e "HOME=\${APP_HOME}" \
     -e "XDG_CONFIG_HOME=\${APP_CONFIG_HOME}" \
     -e "XDG_CACHE_HOME=\${APP_CACHE_HOME}" \
     -e "XDG_DATA_HOME=\${APP_DATA_HOME}" \
     work_container ngrok config add-authtoken "\$1"
+  exit \$?
 fi
 
 HOST_PORT="\${MODE}"
@@ -283,7 +298,8 @@ if sudo podman exec work_container sh -lc 'getent hosts host.containers.internal
   TARGET_HOST="host.containers.internal"
 fi
 
-exec sudo podman exec -it \
+podman_exec_stdio_args
+sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" \
   -e "HOME=\${APP_HOME}" \
   -e "XDG_CONFIG_HOME=\${APP_CONFIG_HOME}" \
   -e "XDG_CACHE_HOME=\${APP_CACHE_HOME}" \
@@ -316,7 +332,7 @@ if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container
   exit 1
 fi
 
-exec sudo podman logs -f work_container 2>&1 | grep -Ei 'tinyproxy|connect|request|opensock|upstream|client|closed connection'
+sudo podman logs -f work_container 2>&1 | grep -Ei 'tinyproxy|connect|request|opensock|upstream|client|closed connection'
 EOF
   sudo chmod 755 "${WORK_PROXY_BIN}"
   echo "Installed proxy log wrapper: ${WORK_PROXY_BIN}"
@@ -330,6 +346,7 @@ install_runtime_bundle() {
   sudo cp -f "${SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/sync-certs"
   sudo cp -f "${SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open"
   sudo cp -f "${SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-mounts"
+  sudo cp -f "${SCRIPTS_DIR}/host-podman-exec" "${RUNTIME_SCRIPTS_DIR}/host-podman-exec"
   sudo cp -f "${SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings"
   sudo cp -f "${SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/image-utils"
   sudo cp -f "${SCRIPTS_DIR}/runtime-status" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
@@ -344,7 +361,7 @@ install_runtime_bundle() {
   if [[ -d "${PROJECT_DIR}/certs" ]]; then
     sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
   fi
-  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
+  sudo chmod 755 "${RUNTIME_SCRIPTS_DIR}/service-start" "${RUNTIME_SCRIPTS_DIR}/service-stop" "${RUNTIME_SCRIPTS_DIR}/service-status" "${RUNTIME_SCRIPTS_DIR}/sync-certs" "${RUNTIME_SCRIPTS_DIR}/chrome-work-open" "${RUNTIME_SCRIPTS_DIR}/host-mounts" "${RUNTIME_SCRIPTS_DIR}/host-podman-exec" "${RUNTIME_SCRIPTS_DIR}/host-gtk-settings" "${RUNTIME_SCRIPTS_DIR}/image-utils" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
   echo "Installed runtime bundle: ${RUNTIME_BASE}"
 }
 

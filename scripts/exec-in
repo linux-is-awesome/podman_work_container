@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=host-podman-exec
+source "${SCRIPT_DIR}/host-podman-exec"
+
 if [[ $# -eq 0 ]]; then
   echo "Usage: ./start exec-in <command> [args...]" >&2
   exit 1
@@ -80,7 +84,7 @@ if [[ "${CMD[0]}" == "sf" ]] || [[ "${CMD[0]}" == "sfdx" ]]; then
     done
     HELP_CMD+=(--help)
 
-    if sudo podman exec work_container \
+    if sudo podman exec -i work_container \
       setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- \
       "${HELP_CMD[@]}" 2>/dev/null | awk '/--browser/ {found=1} END {exit found?0:1}'; then
       CMD+=(--browser chrome)
@@ -129,5 +133,7 @@ if [[ -n "${PWD:-}" ]]; then
   WORKDIR_ARGS+=(--workdir "${PWD}")
 fi
 
-sudo podman exec "${WORKDIR_ARGS[@]}" "${ENV_ARGS[@]}" work_container \
+podman_exec_stdio_args
+
+sudo podman exec "${PODMAN_EXEC_STDIO[@]}" "${WORKDIR_ARGS[@]}" "${ENV_ARGS[@]}" work_container \
   setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
