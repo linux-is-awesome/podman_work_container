@@ -32,7 +32,7 @@
 - Host → container exec: `scripts/host-podman-exec` `podman_exec_stdio_args` (`-i` always; `-t` only when stdin and stdout are TTYs). Used by `exec-in`, `work-container-app`, `work-shell`, `work-ngrok`. Do not `exec` into `podman exec`/`podman logs` from wrappers—keep a host shell for signal/session teardown. Probe/helper `podman exec` calls that only read output use `-i` alone.
 
 - Devices: `scripts/host-mounts` `add_host_usb_devices` — `--privileged` and `/dev:/dev:rslave` (host hot-plug, same ACLs); optional `pcscd` socket. Wired from `service-start` and `run`. VPN kill-switch unchanged.
-- GUI apps (Chrome, Firefox, VS Code): host desktop entries call `work-container-app <app>` (no per-app `work-*` wrappers). VS Code: `scripts/vscode-work-open` bind-mounts onto `/usr/bin/code` (resolves to `/usr/share/code/bin/code`); wrapper must `exec /usr/share/code/code` (Electron), **not** `bin/code` (that path is the mount). Chrome mounts to `/usr/local/bin/google-chrome` separately from `google-chrome-stable`.
+- GUI apps (Chrome, Firefox, VS Code): host desktop entries call `work-container-app <app>` (no per-app `work-*` wrappers). VS Code: `scripts/vscode-work-open` bind-mounted on `/usr/bin/code`; must `exec /usr/share/code/code` (not `bin/code`, mount target). `vscode-work.desktop`: `StartupWMClass=code` (Wayland app id from container VS Code).
 
 ## Font/GTK Strategy (Current)
 - Keep host font/fontconfig mounts in `scripts/host-mounts`, including:
