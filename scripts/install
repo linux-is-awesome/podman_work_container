@@ -187,7 +187,7 @@ if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container
 fi
 
 if [[ \$# -eq 0 ]]; then
-  work_container_exec_as_user -e PS1='work-shell# ' -- bash --noprofile --norc -i
+  work_container_exec_as_user -e PS1='work-shell# ' -- bash -i
 else
   work_container_exec_as_user -- "\$@"
 fi
@@ -306,6 +306,8 @@ install_runtime_bundle() {
   sudo cp -f "${SCRIPTS_DIR}/runtime-status" "${RUNTIME_SCRIPTS_DIR}/runtime-status"
   sudo cp -f "${PROJECT_DIR}/config/swanctl.conf.template" "${RUNTIME_BASE}/config/swanctl.conf.template"
   sudo cp -f "${PROJECT_DIR}/config/tinyproxy.conf.template" "${RUNTIME_BASE}/config/tinyproxy.conf.template"
+  sudo cp -f "${PROJECT_DIR}/config/bashrc" "${RUNTIME_BASE}/config/bashrc"
+  sudo cp -f "${PROJECT_DIR}/config/profile" "${RUNTIME_BASE}/config/profile"
   if [[ -f "${PROJECT_DIR}/config/vpn.env" ]]; then
     sudo cp -f "${PROJECT_DIR}/config/vpn.env" "${RUNTIME_BASE}/config/vpn.env"
   fi

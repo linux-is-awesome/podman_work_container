@@ -3,6 +3,7 @@
 Single Podman container (`work_container` image and service) with:
 - StrongSwan VPN client (inside the container)
 - Salesforce CLI (`sf`)
+- mise (runtime version manager; default `config/bashrc` seeds APP_HOME; `mise install` stores Node/Java/etc. under `~/.containers/work_container/home`)
 - Google Chrome
 - Firefox ESR
 - Visual Studio Code
@@ -222,6 +223,8 @@ so container tools/apps can work with your normal files.
 `~/.containers/work_container/home`
 
 This keeps container app settings isolated from your normal host app configs.
+
+`work-shell` and VS Code integrated terminals use that path as `HOME`. Default `~/.bashrc` / `~/.profile` are seeded from `config/bashrc` and `config/profile` on first `service-start` (mise activate included). Edit the live files under `~/.containers/work_container/home/` or change the shipped templates in `config/`.
 
 ## 5) Update VPN settings without rebuild
 

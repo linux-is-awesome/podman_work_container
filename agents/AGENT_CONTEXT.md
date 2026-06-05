@@ -33,6 +33,7 @@
 
 - Devices: `scripts/host-mounts` `add_host_usb_devices` — `--privileged` and `/dev:/dev:rslave` (host hot-plug, same ACLs); optional `pcscd` socket. Wired from `service-start` and `run`. VPN kill-switch unchanged.
 - GUI apps (Chrome, Firefox, VS Code): host desktop entries call `work-container-app <app>` (no per-app `work-*` wrappers). Chrome: `scripts/chrome-work-open` bind-mounted on `/usr/bin/google-chrome-stable` and `/usr/local/bin/google-chrome`; must `exec /opt/google/chrome/chrome` (not `google-chrome-stable`, mount target). Set `BROWSER=/usr/local/bin/chrome-work-open` in container GUI env (`exec-in`, `work-container-app`) for xdg-open / VS Code external links. VS Code: `scripts/vscode-work-open` on `/usr/bin/code`; `exec /usr/share/code/code`; `StartupWMClass=code`.
+- `mise` is baked into the image at `/usr/local/bin/mise`. User-installed runtimes (`mise install`) persist under `~/.containers/work_container/home` (container `HOME` / `XDG_*`), not in the image layer. Default shell rc ships in `config/bashrc` (includes `mise activate`) and `config/profile`; `service-start` copies them into APP_HOME when `~/.bashrc` / `~/.profile` are missing. `work-shell` runs `bash -i` (normal rc files).
 
 ## Font/GTK Strategy (Current)
 - Keep host font/fontconfig mounts in `scripts/host-mounts`, including:
