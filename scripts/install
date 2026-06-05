@@ -96,26 +96,6 @@ if ! grep -qx 'work_container' <<< "${ps_names}"; then
   exit 1
 fi
 
-HOST_UID="$(id -u)"
-HOST_GID="$(id -g)"
-HOST_GROUPS_CSV="$(id -G | tr ' ' ',')"
-GPU_GIDS=()
-if [[ -e /dev/dri/renderD128 ]]; then
-  GPU_GIDS+=("$(stat -c '%g' /dev/dri/renderD128)")
-fi
-if [[ -e /dev/dri/card0 ]]; then
-  GPU_GIDS+=("$(stat -c '%g' /dev/dri/card0)")
-fi
-for gid in "${GPU_GIDS[@]}"; do
-  if [[ -n "${gid}" ]] && [[ ",${HOST_GROUPS_CSV}," != *",${gid},"* ]]; then
-    HOST_GROUPS_CSV="${HOST_GROUPS_CSV},${gid}"
-  fi
-done
-
-WORK_HOME="${HOME}/.containers/work_container"
-APP_HOME="${WORK_HOME}/home"
-mkdir -p "${APP_HOME}/.config" "${APP_HOME}/.cache" "${APP_HOME}/.local/share"
-
 case "${APP}" in
   google-chrome|chrome)
     CMD=(google-chrome-stable "$@")
@@ -157,34 +137,21 @@ if [[ "${APP}" == "sf" ]] || [[ "${APP}" == "sfdx" ]]; then
     done
     HELP_CMD+=(--help)
 
-    if sudo podman exec -i work_container \
-      setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- \
-      "${HELP_CMD[@]}" 2>/dev/null | awk '/--browser/ {found=1} END {exit found?0:1}'; then
+    WORK_CONTAINER_EXEC_STDIO=probe
+    if work_container_exec_as_user -- "${HELP_CMD[@]}" 2>/dev/null | awk '/--browser/ {found=1} END {exit found?0:1}'; then
       CMD+=(--browser chrome)
     fi
+    unset WORK_CONTAINER_EXEC_STDIO
   fi
 fi
 
-ENV_ARGS=()
-[[ -n "${DISPLAY:-}" ]] && ENV_ARGS+=(--env "DISPLAY=${DISPLAY}")
-[[ -n "${XAUTHORITY:-}" ]] && ENV_ARGS+=(--env "XAUTHORITY=${XAUTHORITY}")
-[[ -n "${WAYLAND_DISPLAY:-}" ]] && ENV_ARGS+=(--env "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
-[[ -n "${XDG_RUNTIME_DIR:-}" ]] && ENV_ARGS+=(--env "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}")
-[[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && ENV_ARGS+=(--env "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}")
-[[ -n "${PULSE_SERVER:-}" ]] && ENV_ARGS+=(--env "PULSE_SERVER=${PULSE_SERVER}")
-[[ -n "${PIPEWIRE_REMOTE:-}" ]] && ENV_ARGS+=(--env "PIPEWIRE_REMOTE=${PIPEWIRE_REMOTE}")
-[[ -n "${LIBVA_DRIVER_NAME:-}" ]] && ENV_ARGS+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")
-[[ -n "${LIBVA_DRIVERS_PATH:-}" ]] && ENV_ARGS+=(--env "LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH}")
-[[ -n "${VDPAU_DRIVER:-}" ]] && ENV_ARGS+=(--env "VDPAU_DRIVER=${VDPAU_DRIVER}")
-ENV_ARGS+=(--env "HOME=${APP_HOME}" --env "XDG_CONFIG_HOME=${APP_HOME}/.config" --env "XDG_CACHE_HOME=${APP_HOME}/.cache" --env "XDG_DATA_HOME=${APP_HOME}/.local/share")
-
-WORKDIR_ARGS=()
+EXEC_ARGS=()
+podman_append_gui_session_env EXEC_ARGS
 if [[ -n "${PWD:-}" ]]; then
-  WORKDIR_ARGS+=(--workdir "${PWD}")
+  EXEC_ARGS+=(--workdir "${PWD}")
 fi
 
-podman_exec_stdio_args
-sudo podman exec "${PODMAN_EXEC_STDIO[@]}" "${WORKDIR_ARGS[@]}" "${ENV_ARGS[@]}" work_container setpriv --reuid "${HOST_UID}" --regid "${HOST_GID}" --groups "${HOST_GROUPS_CSV}" -- "${CMD[@]}"
+work_container_exec_as_user "${EXEC_ARGS[@]}" -- "${CMD[@]}"
 EOF
   sudo chmod 755 "${SYSTEM_RUNNER_BIN}"
   echo "Installed system runner: ${SYSTEM_RUNNER_BIN}"
@@ -219,11 +186,10 @@ if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container
   sudo systemctl restart "\${SERVICE_NAME}"
 fi
 
-podman_exec_stdio_args
 if [[ \$# -eq 0 ]]; then
-  sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" -e PS1='work-shell# ' work_container bash --noprofile --norc -i
+  work_container_exec_as_user -e PS1='work-shell# ' -- bash --noprofile --norc -i
 else
-  sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" work_container "\$@"
+  work_container_exec_as_user -- "\$@"
 fi
 EOF
   sudo chmod 755 "${WORK_SHELL_BIN}"
@@ -239,11 +205,6 @@ set -euo pipefail
 source /usr/local/lib/work_container/scripts/host-podman-exec
 
 SERVICE_NAME="work_container.service"
-WORK_HOME="\${HOME}/.containers/work_container"
-APP_HOME="\${WORK_HOME}/home"
-APP_CONFIG_HOME="\${APP_HOME}/.config"
-APP_CACHE_HOME="\${APP_HOME}/.cache"
-APP_DATA_HOME="\${APP_HOME}/.local/share"
 
 if [[ \$# -lt 1 ]]; then
   echo "Usage:" >&2
@@ -255,7 +216,8 @@ fi
 MODE="\$1"
 shift || true
 
-mkdir -p "\${APP_CONFIG_HOME}/ngrok" "\${APP_CACHE_HOME}" "\${APP_DATA_HOME}"
+ensure_work_container_app_home
+mkdir -p "\$(work_container_app_home_dir)/.config/ngrok"
 
 if [[ "\${MODE}" == "auth" ]]; then
   if [[ \$# -ne 1 ]]; then
@@ -263,13 +225,7 @@ if [[ "\${MODE}" == "auth" ]]; then
     exit 1
   fi
 
-  podman_exec_stdio_args
-  sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" \
-    -e "HOME=\${APP_HOME}" \
-    -e "XDG_CONFIG_HOME=\${APP_CONFIG_HOME}" \
-    -e "XDG_CACHE_HOME=\${APP_CACHE_HOME}" \
-    -e "XDG_DATA_HOME=\${APP_DATA_HOME}" \
-    work_container ngrok config add-authtoken "\$1"
+  work_container_exec_as_user -- ngrok config add-authtoken "\$1"
   exit \$?
 fi
 
@@ -301,13 +257,7 @@ if sudo podman exec work_container sh -lc 'getent hosts host.containers.internal
   TARGET_HOST="host.containers.internal"
 fi
 
-podman_exec_stdio_args
-sudo podman exec "\${PODMAN_EXEC_STDIO[@]}" \
-  -e "HOME=\${APP_HOME}" \
-  -e "XDG_CONFIG_HOME=\${APP_CONFIG_HOME}" \
-  -e "XDG_CACHE_HOME=\${APP_CACHE_HOME}" \
-  -e "XDG_DATA_HOME=\${APP_DATA_HOME}" \
-  work_container ngrok http "http://\${TARGET_HOST}:\${HOST_PORT}" "\$@"
+work_container_exec_as_user -- ngrok http "http://\${TARGET_HOST}:\${HOST_PORT}" "\$@"
 EOF
   sudo chmod 755 "${WORK_NGROK_BIN}"
   echo "Installed ngrok wrapper: ${WORK_NGROK_BIN}"

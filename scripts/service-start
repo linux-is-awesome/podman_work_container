@@ -10,6 +10,7 @@ if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
 fi
 source "${SCRIPT_DIR}/image-utils"
 source "${SCRIPT_DIR}/host-mounts"
+source "${SCRIPT_DIR}/host-podman-exec"
 source "${SCRIPT_DIR}/host-gtk-settings"
 source "${SCRIPT_DIR}/runtime-status"
 
@@ -162,6 +163,11 @@ add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOST_HOME}"
 add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOST_HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
+APP_HOME="$(work_container_app_home_dir "${HOST_HOME}")"
+ensure_work_container_app_home "${HOST_HOME}"
+APP_HOME_ENV=()
+work_container_run_app_home_env APP_HOME_ENV "${APP_HOME}" "${HOST_HOME}"
+
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 
 echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
@@ -181,7 +187,7 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   -v "/etc/passwd:/etc/passwd:ro" \
   -v "/etc/group:/etc/group:ro" \
   -v "${HOST_HOME}:${HOST_HOME}:rw" \
-  -e "HOME=${HOST_HOME}" \
+  "${APP_HOME_ENV[@]}" \
   -w "${HOST_HOME}" \
   -e "XDG_RUNTIME_DIR=${HOST_RUNTIME_DIR}" \
   -e "WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}" \
