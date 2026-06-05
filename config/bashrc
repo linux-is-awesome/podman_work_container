@@ -1,0 +1,11 @@
+# Default ~/.bashrc for work_container (from config/bashrc in the project).
+# Seeded into ~/.containers/work_container/home/.bashrc when that file is missing.
+# Add custom shell init below; this file is not overwritten once present.
+
+# If not running interactively, don't do anything.
+case $- in
+    *i*) ;;
+      *) return;;
+esac
+
+eval "$(mise activate bash)"

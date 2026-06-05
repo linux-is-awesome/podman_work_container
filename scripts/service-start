@@ -164,7 +164,7 @@ add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOST_HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 
 APP_HOME="$(work_container_app_home_dir "${HOST_HOME}")"
-ensure_work_container_app_home "${HOST_HOME}"
+ensure_work_container_app_home "${HOST_HOME}" "${CONFIG_DIR}"
 APP_HOME_ENV=()
 work_container_run_app_home_env APP_HOME_ENV "${APP_HOME}" "${HOST_HOME}"
 

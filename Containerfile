@@ -77,6 +77,10 @@ RUN arch="$(dpkg --print-architecture)" \
     && chmod 755 /usr/local/bin/ngrok \
     && rm -f /tmp/ngrok.tgz
 
+# Install mise (runtime version manager; tool installs live in container APP_HOME).
+ENV MISE_INSTALL_PATH=/usr/local/bin/mise
+RUN curl -fsSL https://mise.run | sh
+
 COPY scripts/entrypoint /usr/local/bin/work_container-entrypoint
 COPY scripts/vpn-updown /usr/local/bin/work-container-vpn-updown
 COPY config/charon-updown-dns.conf /etc/strongswan.d/charon/zz-updown-dns.conf
