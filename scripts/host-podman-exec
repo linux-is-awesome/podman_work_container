@@ -9,3 +9,101 @@ podman_exec_stdio_args() {
     PODMAN_EXEC_STDIO+=(-t)
   fi
 }
+
+work_container_app_home_dir() {
+  local host_home="${1:-${HOME}}"
+  echo "${host_home}/.containers/work_container/home"
+}
+
+ensure_work_container_app_home() {
+  local app_home
+  app_home="$(work_container_app_home_dir "${1:-${HOME}}")"
+  mkdir -p "${app_home}/.config" "${app_home}/.cache" "${app_home}/.local/share"
+}
+
+work_container_host_groups_csv() {
+  local groups_csv
+  local gid
+  groups_csv="$(id -G | tr ' ' ',')"
+  if [[ -e /dev/dri/renderD128 ]]; then
+    gid="$(stat -c '%g' /dev/dri/renderD128)"
+    if [[ -n "${gid}" ]] && [[ ",${groups_csv}," != *",${gid},"* ]]; then
+      groups_csv="${groups_csv},${gid}"
+    fi
+  fi
+  if [[ -e /dev/dri/card0 ]]; then
+    gid="$(stat -c '%g' /dev/dri/card0)"
+    if [[ -n "${gid}" ]] && [[ ",${groups_csv}," != *",${gid},"* ]]; then
+      groups_csv="${groups_csv},${gid}"
+    fi
+  fi
+  echo "${groups_csv}"
+}
+
+# Host GUI session vars for app launches (DISPLAY, Wayland, audio, VA-API).
+podman_append_gui_session_env() {
+  local -n _env_args="$1"
+
+  [[ -n "${DISPLAY:-}" ]] && _env_args+=(--env "DISPLAY=${DISPLAY}")
+  [[ -n "${XAUTHORITY:-}" ]] && _env_args+=(--env "XAUTHORITY=${XAUTHORITY}")
+  [[ -n "${WAYLAND_DISPLAY:-}" ]] && _env_args+=(--env "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
+  [[ -n "${XDG_RUNTIME_DIR:-}" ]] && _env_args+=(--env "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}")
+  [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && _env_args+=(--env "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}")
+  [[ -n "${PULSE_SERVER:-}" ]] && _env_args+=(--env "PULSE_SERVER=${PULSE_SERVER}")
+  [[ -n "${PIPEWIRE_REMOTE:-}" ]] && _env_args+=(--env "PIPEWIRE_REMOTE=${PIPEWIRE_REMOTE}")
+  [[ -n "${LIBVA_DRIVER_NAME:-}" ]] && _env_args+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")
+  [[ -n "${LIBVA_DRIVERS_PATH:-}" ]] && _env_args+=(--env "LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH}")
+  [[ -n "${VDPAU_DRIVER:-}" ]] && _env_args+=(--env "VDPAU_DRIVER=${VDPAU_DRIVER}")
+  return 0
+}
+
+# Set on podman run in service-start only; podman exec inherits container env.
+work_container_run_app_home_env() {
+  local -n _run_env_args="$1"
+  local app_home="$2"
+  local host_home="$3"
+
+  _run_env_args+=(-e "HOME=${app_home}")
+  _run_env_args+=(-e "XDG_CONFIG_HOME=${app_home}/.config")
+  _run_env_args+=(-e "XDG_CACHE_HOME=${app_home}/.cache")
+  _run_env_args+=(-e "XDG_DATA_HOME=${app_home}/.local/share")
+  _run_env_args+=(-e "BROWSER=/usr/local/bin/chrome-work-open")
+  _run_env_args+=(-e "WORK_CONTAINER_HOST_HOME=${host_home}")
+}
+
+# Run a command in work_container as the calling host user (setpriv).
+# Usage: work_container_exec_as_user [podman exec flags...] -- command [args...]
+# Set WORK_CONTAINER_EXEC_STDIO=probe for stdin-only (-i) helper execs.
+work_container_exec_as_user() {
+  local -a podman_args=()
+  local -a cmd=()
+  local saw_sep=0
+  local arg
+
+  for arg in "$@"; do
+    if [[ "${saw_sep}" -eq 0 ]] && [[ "${arg}" == "--" ]]; then
+      saw_sep=1
+      continue
+    fi
+    if [[ "${saw_sep}" -eq 1 ]]; then
+      cmd+=("${arg}")
+    else
+      podman_args+=("${arg}")
+    fi
+  done
+
+  if [[ "${#cmd[@]}" -eq 0 ]]; then
+    echo "work_container_exec_as_user: missing command after --" >&2
+    return 1
+  fi
+
+  if [[ "${WORK_CONTAINER_EXEC_STDIO:-}" == probe ]]; then
+    PODMAN_EXEC_STDIO=(-i)
+  else
+    podman_exec_stdio_args
+  fi
+
+  sudo podman exec "${PODMAN_EXEC_STDIO[@]}" "${podman_args[@]}" work_container \
+    setpriv --reuid "$(id -u)" --regid "$(id -g)" --groups "$(work_container_host_groups_csv)" -- \
+    "${cmd[@]}"
+}

@@ -1,7 +1,8 @@
 #!/bin/sh
-# Used as BROWSER for container tools: one executable path (xdg-open / tools often
-# ignore multi-word BROWSER=...). Force full Work identity and Wayland flags.
-exec google-chrome-stable \
+# Bind-mounted on /usr/bin/google-chrome-stable (and /usr/local/bin/google-chrome).
+# Must exec the Chrome binary, not google-chrome-stable (that path is this script).
+# Used as BROWSER for xdg-open / tools that need one executable path.
+exec /opt/google/chrome/chrome \
   --enable-features=UseOzonePlatform \
   --ozone-platform-hint=auto \
   --ozone-platform=wayland \

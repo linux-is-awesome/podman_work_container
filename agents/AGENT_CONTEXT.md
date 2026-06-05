@@ -16,7 +16,7 @@
 - **No backward compatibility.** Never add migration shims, dual code paths, renamed-file cleanup in install/uninstall, “support old config/layout” branches, or deprecated-option handling unless the user explicitly requests it in the current session.
 
 ## Current Important Behaviors
-- `work-shell` opens shell in running container with clear `work-shell#` prompt.
+- Container `HOME` / `XDG_*` / `BROWSER` / `WORK_CONTAINER_HOST_HOME` are set once in `service-start` (`work_container_run_app_home_env`); all `podman exec` paths inherit them. App config lives under `~/.containers/work_container/home`. Host home is bind-mounted at the same path for projects/fonts; service/work-shell start cwd is host home.
 - `sf`/`sfdx` run with `--workdir "${PWD}"` so project resolution follows caller dir.
 - `service-status` checks running container first, then image availability.
 - VPN watchdog in `scripts/entrypoint`: retries every 5s while unhealthy, every 30s when tunnel+DNS OK; checks CHILD_SA and DNS (`getent`), not IKE name alone; logs `VPN watchdog: network OK (tunnel and DNS working again)` plus public egress IP when recovering after a drop (not duplicated if already healthy at startup).
@@ -29,10 +29,10 @@
 - Proxy template is `config/tinyproxy.conf.template`; runtime proxy config is rendered under `/etc/tinyproxy/tinyproxy.conf` (not `/tmp`).
 - `service-start` and `service-status` should report real proxy status (based on host listening socket), not just configured endpoint text.
 - VPN kill-switch in `scripts/entrypoint`: IPv4 default DROP; egress internet only via `-m policy --pol ipsec`; IKE UDP to `VPN_SERVER_IP`; TCP to bridge gateway for host dev/Chrome/ngrok backend only; INPUT TCP dport `NODE_PROXY_PORT` for published tinyproxy; `ip6tables` all DROP; mangle `TCPMSS --clamp-mss-to-pmtu` on IPsec OUTPUT only. Manual checks: `tests/verify-killswitch-features.sh` (see `tests/README.md`).
-- Host → container exec: `scripts/host-podman-exec` `podman_exec_stdio_args` (`-i` always; `-t` only when stdin and stdout are TTYs). Used by `exec-in`, `work-container-app`, `work-shell`, `work-ngrok`. Do not `exec` into `podman exec`/`podman logs` from wrappers—keep a host shell for signal/session teardown. Probe/helper `podman exec` calls that only read output use `-i` alone.
+- Host → container exec: `scripts/host-podman-exec` — all app/tool commands use `work_container_exec_as_user` (setpriv to host uid/gid/groups). GUI launches add session env via `podman_append_gui_session_env`. Stdio: `podman_exec_stdio_args` (`-i` always; `-t` when both streams are TTYs); probes set `WORK_CONTAINER_EXEC_STDIO=probe` for `-i` only. `work-proxy` uses `podman logs` only (no exec).
 
 - Devices: `scripts/host-mounts` `add_host_usb_devices` — `--privileged` and `/dev:/dev:rslave` (host hot-plug, same ACLs); optional `pcscd` socket. Wired from `service-start` and `run`. VPN kill-switch unchanged.
-- GUI apps (Chrome, Firefox, VS Code): host desktop entries call `work-container-app <app>` (no per-app `work-*` wrappers). VS Code: `scripts/vscode-work-open` bind-mounted on `/usr/bin/code`; must `exec /usr/share/code/code` (not `bin/code`, mount target). `vscode-work.desktop`: `StartupWMClass=code` (Wayland app id from container VS Code).
+- GUI apps (Chrome, Firefox, VS Code): host desktop entries call `work-container-app <app>` (no per-app `work-*` wrappers). Chrome: `scripts/chrome-work-open` bind-mounted on `/usr/bin/google-chrome-stable` and `/usr/local/bin/google-chrome`; must `exec /opt/google/chrome/chrome` (not `google-chrome-stable`, mount target). Set `BROWSER=/usr/local/bin/chrome-work-open` in container GUI env (`exec-in`, `work-container-app`) for xdg-open / VS Code external links. VS Code: `scripts/vscode-work-open` on `/usr/bin/code`; `exec /usr/share/code/code`; `StartupWMClass=code`.
 
 ## Font/GTK Strategy (Current)
 - Keep host font/fontconfig mounts in `scripts/host-mounts`, including:

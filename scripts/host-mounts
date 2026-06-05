@@ -9,6 +9,7 @@ add_host_mounts() {
   if [[ -x "${script_dir}/chrome-work-open" ]]; then
     _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
     _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/google-chrome:ro")
+    _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/bin/google-chrome-stable:ro")
   fi
 
   if [[ -x "${script_dir}/vscode-work-open" ]]; then
