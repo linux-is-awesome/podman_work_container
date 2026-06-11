@@ -28,7 +28,7 @@ HOST_GID="${WORK_CONTAINER_HOST_GID:-$(id -g)}"
 HOST_RUNTIME_DIR="${WORK_CONTAINER_HOST_RUNTIME_DIR:-/run/user/${HOST_UID}}"
 IMAGE_DIR="${WORK_CONTAINER_IMAGE_DIR:-${IMAGE_DIR}}"
 HOST_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
-HOST_TIMEZONE="${TZ:-}"
+HOST_TIMEZONE="$(work_container_host_timezone)"
 WAIT_FOR_GUI="${WORK_CONTAINER_WAIT_FOR_GUI:-0}"
 WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-180}"
 WAIT_FOR_PAYLOAD="${WORK_CONTAINER_WAIT_FOR_PAYLOAD:-1}"
@@ -153,12 +153,7 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
-if [[ -f /etc/localtime ]]; then
-  DISPLAY_ARGS+=("-v" "/etc/localtime:/etc/localtime:ro")
-fi
-if [[ -f /etc/timezone ]]; then
-  DISPLAY_ARGS+=("-v" "/etc/timezone:/etc/timezone:ro")
-fi
+podman_append_host_timezone_mounts DISPLAY_ARGS "${HOST_TIMEZONE}"
 add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOST_HOME}"
 add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOST_HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"

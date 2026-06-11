@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libstrongswan-extra-plugins \
     libstrongswan-standard-plugins \
     procps \
+    psmisc \
     strongswan \
     strongswan-swanctl \
     tinyproxy \
