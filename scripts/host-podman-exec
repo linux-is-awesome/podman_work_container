@@ -50,6 +50,46 @@ ensure_work_container_app_home() {
   ensure_work_container_shell_rc "${app_home}" "${config_dir}"
 }
 
+# Host IANA timezone (systemd service-start often has no TZ in the environment).
+work_container_host_timezone() {
+  if [[ -n "${TZ:-}" ]]; then
+    echo "${TZ}"
+    return 0
+  fi
+
+  local tz=""
+  if command -v timedatectl >/dev/null 2>&1; then
+    tz="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+  fi
+  if [[ -z "${tz}" ]] && [[ -f /etc/timezone ]]; then
+    tz="$(tr -d ' \t\n\r' </etc/timezone)"
+  fi
+  if [[ -z "${tz}" ]]; then
+    local resolved=""
+    resolved="$(readlink -f /etc/localtime 2>/dev/null || true)"
+    if [[ "${resolved}" == */zoneinfo/* ]]; then
+      tz="${resolved#*/zoneinfo/}"
+    fi
+  fi
+  [[ -n "${tz}" ]] || tz="UTC"
+  echo "${tz}"
+}
+
+# Mount zoneinfo file directly; bind-mounting /etc/localtime symlink often leaves UTC in the container.
+podman_append_host_timezone_mounts() {
+  local -n _mount_args="$1"
+  local tz="$2"
+
+  if [[ -f "/usr/share/zoneinfo/${tz}" ]]; then
+    _mount_args+=("-v" "/usr/share/zoneinfo/${tz}:/etc/localtime:ro")
+  elif [[ -e /etc/localtime ]]; then
+    _mount_args+=("-v" "/etc/localtime:/etc/localtime:ro")
+  fi
+  if [[ -f /etc/timezone ]]; then
+    _mount_args+=("-v" "/etc/timezone:/etc/timezone:ro")
+  fi
+}
+
 work_container_host_groups_csv() {
   local groups_csv
   local gid
@@ -83,6 +123,7 @@ podman_append_gui_session_env() {
   [[ -n "${LIBVA_DRIVER_NAME:-}" ]] && _env_args+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")
   [[ -n "${LIBVA_DRIVERS_PATH:-}" ]] && _env_args+=(--env "LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH}")
   [[ -n "${VDPAU_DRIVER:-}" ]] && _env_args+=(--env "VDPAU_DRIVER=${VDPAU_DRIVER}")
+  _env_args+=(--env "TZ=${TZ:-$(work_container_host_timezone)}")
   return 0
 }
 
