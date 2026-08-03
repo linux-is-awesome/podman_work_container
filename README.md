@@ -4,6 +4,7 @@ Single Podman container (`work_container` image and service) with:
 - StrongSwan VPN client (inside the container)
 - Salesforce CLI (`sf`)
 - mise (runtime version manager; default `config/bashrc` seeds APP_HOME; `mise install` stores Node/Java/etc. under `~/.containers/work_container/home`)
+- pipx (CLI Python apps into APP_HOME; image includes `python3` / `python3-venv`)
 - Google Chrome
 - Firefox ESR
 - Visual Studio Code
