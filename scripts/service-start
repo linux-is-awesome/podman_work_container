@@ -186,9 +186,11 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   -w "${HOST_HOME}" \
   -e "XDG_RUNTIME_DIR=${HOST_RUNTIME_DIR}" \
   -e "WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}" \
+  -e "XDG_SESSION_TYPE=wayland" \
   -e "TZ=${HOST_TIMEZONE}" \
   -e "WORK_CONTAINER_NODE_PROXY_PORT=${NODE_PROXY_PORT}" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
+  -e "DBUS_SESSION_BUS_ADDRESS=unix:path=${HOST_RUNTIME_DIR}/bus" \
   -e "PULSE_SERVER=unix:${HOST_RUNTIME_DIR}/pulse/native" \
   -p "127.0.0.1:${NODE_PROXY_PORT}:${NODE_PROXY_PORT}" \
   "${DISPLAY_ARGS[@]}" \

@@ -112,12 +112,15 @@ work_container_host_groups_csv() {
 # Host GUI session vars for app launches (DISPLAY, Wayland, audio, VA-API).
 podman_append_gui_session_env() {
   local -n _env_args="$1"
+  local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  local session_bus="unix:path=${runtime_dir}/bus"
 
   [[ -n "${DISPLAY:-}" ]] && _env_args+=(--env "DISPLAY=${DISPLAY}")
   [[ -n "${XAUTHORITY:-}" ]] && _env_args+=(--env "XAUTHORITY=${XAUTHORITY}")
   [[ -n "${WAYLAND_DISPLAY:-}" ]] && _env_args+=(--env "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}")
-  [[ -n "${XDG_RUNTIME_DIR:-}" ]] && _env_args+=(--env "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}")
-  [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]] && _env_args+=(--env "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}")
+  _env_args+=(--env "XDG_RUNTIME_DIR=${runtime_dir}")
+  _env_args+=(--env "XDG_SESSION_TYPE=wayland")
+  _env_args+=(--env "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-${session_bus}}")
   [[ -n "${PULSE_SERVER:-}" ]] && _env_args+=(--env "PULSE_SERVER=${PULSE_SERVER}")
   [[ -n "${PIPEWIRE_REMOTE:-}" ]] && _env_args+=(--env "PIPEWIRE_REMOTE=${PIPEWIRE_REMOTE}")
   [[ -n "${LIBVA_DRIVER_NAME:-}" ]] && _env_args+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")

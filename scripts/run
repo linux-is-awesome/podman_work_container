@@ -129,7 +129,9 @@ prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "$
   -v "/etc/passwd:/etc/passwd:ro" \
   -v "/etc/group:/etc/group:ro" \
   -e "TZ=${HOST_TIMEZONE}" \
+  -e "XDG_SESSION_TYPE=wayland" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
+  -e "DBUS_SESSION_BUS_ADDRESS=unix:path=${HOST_RUNTIME_DIR}/bus" \
   -e "PULSE_SERVER=unix:/run/user/$(id -u)/pulse/native" \
   -e "WORK_CONTAINER_NODE_PROXY_PORT=${NODE_PROXY_PORT}" \
   -p "127.0.0.1:${NODE_PROXY_PORT}:${NODE_PROXY_PORT}" \
