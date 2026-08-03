@@ -34,6 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libstrongswan-standard-plugins \
     procps \
     psmisc \
+    python3 \
+    python3-pip \
+    python3-venv \
+    pipx \
     strongswan \
     strongswan-swanctl \
     tinyproxy \
