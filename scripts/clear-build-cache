@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PODMAN_BIN=(sudo podman)
+
+echo "Clearing work_container build cache (dangling image layers)..."
+"${PODMAN_BIN[@]}" image prune -f
+echo "Build cache cleared. Next './start build' will fetch fresh app versions."
