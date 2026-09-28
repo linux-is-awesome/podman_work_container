@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libstrongswan-standard-plugins \
     procps \
     psmisc \
+    openssh-client \
     python3 \
     python3-pip \
     python3-venv \
