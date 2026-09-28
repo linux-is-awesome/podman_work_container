@@ -58,6 +58,7 @@ print_help() {
   echo
   echo "${C_BOLD}Commands${C_RESET}"
   echo "  ${C_GREEN}build${C_RESET}"
+  echo "  ${C_GREEN}clear-build-cache${C_RESET}  (force next build to fetch fresh app versions)"
   echo "  ${C_GREEN}run${C_RESET} [version] [-- command...]"
   echo "  ${C_GREEN}sync-certs${C_RESET}"
   echo "  ${C_GREEN}install${C_RESET}"
@@ -102,6 +103,7 @@ ${C_BOLD}${C_GREEN}Core${C_RESET}
   [4] Install/update system integration
   [5] Uninstall system integration
   [6] Configure VPN
+  [c] Clear build cache (force fresh app versions on next build)
 
 ${C_BOLD}${C_GREEN}Service${C_RESET}
   [7] Start service
@@ -131,6 +133,7 @@ EOF
         ;;
       5) run_cmd uninstall; pause ;;
       6) run_cmd configure-vpn; pause ;;
+      c|C) run_cmd clear-build-cache; pause ;;
       7)
         read -r -p "Optional build version (blank=latest): " ver
         if [[ -n "${ver}" ]]; then run_cmd service-start "${ver}"; else run_cmd service-start; fi
@@ -176,7 +179,7 @@ case "$1" in
   help|-h|--help)
     print_help
     ;;
-  build|run|sync-certs|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
+  build|clear-build-cache|run|sync-certs|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
     cmd="$1"
     shift
     run_cmd "${cmd}" "$@"
