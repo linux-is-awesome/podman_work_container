@@ -226,14 +226,14 @@ vpn_wait_ready() {
 
 vpn_watchdog() {
   local failures=0
-  local interval=5
+  local interval=2
   local was_healthy="${1:-0}"
 
   watchdog_recovered() {
     vpn_log_watchdog_recovery
     was_healthy=1
     failures=0
-    interval=30
+    interval=10
     sleep "${interval}"
   }
 
@@ -244,7 +244,7 @@ vpn_watchdog() {
         continue
       fi
       failures=0
-      interval=30
+      interval=10
       sleep "${interval}"
       continue
     fi
@@ -267,7 +267,7 @@ vpn_watchdog() {
         continue
       fi
       failures=0
-      interval=30
+      interval=10
       sleep "${interval}"
       continue
     fi
@@ -286,7 +286,7 @@ vpn_watchdog() {
       failures=0
     fi
 
-    interval=5
+    interval=2
     sleep "${interval}"
   done
 }

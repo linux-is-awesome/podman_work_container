@@ -6,6 +6,7 @@ connections {
     vips = 0.0.0.0
     encap = yes
     mobike = no
+    dpd_delay = 10s
 
     local {
       auth = eap-mschapv2
