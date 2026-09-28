@@ -20,7 +20,7 @@ require_container() {
 }
 
 # --- static checks ---
-for f in host-podman-exec exec-in service-start install host-mounts chrome-work-open vscode-work-open; do
+for f in host-podman-exec exec-in service-start install host-mounts chrome-work-open vscode-work-open cursor-work-open; do
   bash -n "${SCRIPT_DIR}/${f}" || { fail "syntax ${f}"; exit 1; }
 done
 pass "bash -n on all critical scripts"

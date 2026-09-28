@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Cursor (Work)
+Comment=Cursor from work_container
+Exec=__RUNNER_BIN__ cursor
+Icon=co.anysphere.cursor
+Terminal=false
+Categories=Development;IDE;
+StartupNotify=true
+StartupWMClass=Cursor
