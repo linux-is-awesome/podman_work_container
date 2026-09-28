@@ -8,6 +8,7 @@ Single Podman container (`work_container` image and service) with:
 - Google Chrome
 - Firefox ESR
 - Visual Studio Code
+- Cursor
 
 The host does **not** need to be connected to VPN.  
 The container uses a kill-switch policy: if VPN is not up, container egress stays blocked. IPv4 internet traffic must match IPsec policy; IPv6 is dropped (`ip6tables` + `disable_ipv6`). TCP to the Podman bridge gateway is only for host-side dev/Chrome, not general internet egress.
@@ -120,6 +121,7 @@ Run a specific app directly:
 ./start app google-chrome
 ./start app firefox
 ./start app vscode
+./start app cursor
 ./start app sf --version
 ```
 
@@ -169,6 +171,7 @@ Run tools from the running service container:
 ./start app google-chrome
 ./start app firefox
 ./start app vscode
+./start app cursor
 ```
 
 Access host-local apps from inside container apps (for example Chrome):

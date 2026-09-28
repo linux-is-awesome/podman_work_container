@@ -1,0 +1,8 @@
+#!/bin/sh
+# Bind-mounted on /usr/bin/cursor (symlink target: /usr/share/cursor/bin/cursor).
+# Must exec the Electron binary, not bin/cursor (that path is this script).
+exec /usr/share/cursor/cursor \
+  --no-sandbox \
+  --disable-gpu-sandbox \
+  --ozone-platform=wayland \
+  "$@"

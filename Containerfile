@@ -63,6 +63,13 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
     && apt-get install -y --no-install-recommends code \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Cursor from official Anysphere repo.
+RUN curl -fsSL https://downloads.cursor.com/keys/anysphere.asc | gpg --dearmor -o /usr/share/keyrings/anysphere.gpg \
+    && echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/anysphere.gpg] https://downloads.cursor.com/aptrepo stable main" > /etc/apt/sources.list.d/cursor.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends cursor \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Salesforce CLI.
 RUN curl -fsSL https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-linux-x64.tar.xz -o /tmp/sf.tar.xz \
     && mkdir -p /opt/sf \
