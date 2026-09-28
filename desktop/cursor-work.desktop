@@ -8,4 +8,4 @@ Icon=co.anysphere.cursor
 Terminal=false
 Categories=Development;IDE;
 StartupNotify=true
-StartupWMClass=Cursor
+StartupWMClass=cursor
