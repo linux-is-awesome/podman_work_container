@@ -169,6 +169,7 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
 "${PODMAN_BIN[@]}" run -d --name "${CONTAINER_NAME}" --hostname "${CONTAINER_NAME}" \
   --network bridge \
   --group-add keep-groups \
+  --pids-limit=-1 \
   --shm-size=1g \
   --cap-add NET_ADMIN \
   --cap-add NET_RAW \
