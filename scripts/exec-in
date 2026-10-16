@@ -22,22 +22,27 @@ fi
 
 CMD=("$@")
 
+# Insert browser flags after the binary so any URL/file args stay last.
 if [[ "${CMD[0]}" == "google-chrome" ]] || [[ "${CMD[0]}" == "google-chrome-stable" ]]; then
-  CMD+=(
+  CMD=(
+    "${CMD[0]}"
     "--enable-features=UseOzonePlatform"
     "--ozone-platform-hint=auto"
     "--ozone-platform=wayland"
     "--font-render-hinting=full"
     "--class=Google-chrome-work"
     "--name=Google-chrome-work"
+    "${CMD[@]:1}"
   )
 fi
 if [[ "${CMD[0]}" == "firefox" ]] || [[ "${CMD[0]}" == "firefox-esr" ]]; then
-  CMD+=(
+  CMD=(
+    "${CMD[0]}"
     "--class"
     "Firefox-work"
     "--name"
     "Firefox-work"
+    "${CMD[@]:1}"
   )
 fi
 if [[ "${CMD[0]}" == "sf" ]] || [[ "${CMD[0]}" == "sfdx" ]]; then

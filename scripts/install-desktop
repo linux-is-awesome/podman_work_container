@@ -21,8 +21,9 @@ for file in google-chrome-work.desktop firefox-work.desktop vscode-work.desktop 
 done
 
 update-desktop-database "${TARGET_DIR}" >/dev/null 2>&1 || true
-echo "Desktop launchers installed. Look for:"
-echo "- Google Chrome (Work)"
-echo "- Firefox (Work)"
-echo "- VS Code (Work)"
-echo "- Cursor (Work)"
+echo "Desktop launchers installed (MIME handlers registered). Look for:"
+echo "- Google Chrome (Work) / Firefox (Work) — default browser candidates"
+echo "- VS Code (Work) / Cursor (Work) — default text editor candidates"
+echo "Pick them in Settings → Default Applications, or e.g.:"
+echo "  xdg-settings set default-web-browser google-chrome-work.desktop"
+echo "  xdg-mime default vscode-work.desktop text/plain"
