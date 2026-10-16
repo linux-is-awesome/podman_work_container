@@ -5,12 +5,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    fd-find \
     ffmpeg \
+    file \
     gettext-base \
     git \
     gnupg \
     iproute2 \
     iptables \
+    jq \
     libcanberra-gtk3-module \
     libasound2 \
     libva2 \
@@ -26,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpci3 \
     libvulkan1 \
     libx11-6 \
+    lsof \
     mesa-va-drivers \
     mesa-vulkan-drivers \
     libcharon-extra-plugins \
@@ -39,14 +43,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     pipx \
+    ripgrep \
+    rsync \
+    sqlite3 \
     strongswan \
     strongswan-swanctl \
     tinyproxy \
+    tree \
+    unzip \
     xauth \
+    xxd \
     vainfo \
     xz-utils \
     xdg-utils \
+    yq \
+    zip \
     firefox-esr \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome from official repo.
