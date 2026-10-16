@@ -41,15 +41,22 @@ add_host_mounts() {
 }
 
 # Host /dev bind + privileged: same device nodes and hot-plug as the host (VPN unchanged).
+# /run/udev lets libudev (Chrome FIDO/HID, etc.) see add/remove after USB replug.
 add_host_usb_devices() {
   local -n _mount_args="$1"
 
   _mount_args+=("--privileged")
   _mount_args+=("-v" "/dev:/dev:rslave")
 
-  if [[ -S /run/pcscd/pcscd.sock ]]; then
+  if [[ -d /run/udev ]]; then
+    _mount_args+=("-v" "/run/udev:/run/udev:ro")
+  fi
+
+  # Mount the pcscd rundir when present so a later-started socket is visible
+  # (socket-only checks miss host pcscd that starts after the container).
+  if [[ -d /run/pcscd ]]; then
     _mount_args+=("-v" "/run/pcscd:/run/pcscd:rw")
-  elif [[ -S /var/run/pcscd/pcscd.sock ]]; then
+  elif [[ -d /var/run/pcscd ]]; then
     _mount_args+=("-v" "/var/run/pcscd:/var/run/pcscd:rw")
   fi
 }
