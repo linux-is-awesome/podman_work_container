@@ -98,12 +98,14 @@ fi
 
 case "${APP}" in
   google-chrome|chrome)
-    CMD=(google-chrome-stable "$@")
-    CMD+=("--enable-features=UseOzonePlatform" "--ozone-platform-hint=auto" "--ozone-platform=wayland" "--font-render-hinting=full" "--class=Google-chrome-work" "--name=Google-chrome-work")
+    # Flags before "$@" so desktop %U URLs stay valid Chromium args.
+    CMD=(google-chrome-stable
+      "--enable-features=UseOzonePlatform" "--ozone-platform-hint=auto" "--ozone-platform=wayland"
+      "--font-render-hinting=full" "--class=Google-chrome-work" "--name=Google-chrome-work"
+      "$@")
     ;;
   firefox)
-    CMD=(firefox-esr "$@")
-    CMD+=("--class" "Firefox-work" "--name" "Firefox-work")
+    CMD=(firefox-esr "--class" "Firefox-work" "--name" "Firefox-work" "$@")
     ;;
   vscode|code)
     CMD=(code "$@")
