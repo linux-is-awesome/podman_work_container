@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     gnupg \
     iproute2 \
+    inotify-tools \
     iptables \
     jq \
     libcanberra-gtk3-module \
@@ -109,11 +110,12 @@ RUN curl -fsSL https://mise.run | sh
 
 COPY scripts/entrypoint /usr/local/bin/work_container-entrypoint
 COPY scripts/vpn-updown /usr/local/bin/work-container-vpn-updown
+COPY scripts/sfdx-auth-watch /usr/local/bin/work-container-sfdx-auth-watch
 COPY config/charon-updown-dns.conf /etc/strongswan.d/charon/zz-updown-dns.conf
 COPY config/charon-kernel-netlink-mss.conf /etc/strongswan.d/charon/zz-kernel-netlink-mss.conf
 COPY config/charon-tunnel.conf /etc/strongswan.d/charon/zz-tunnel.conf
 COPY config/gai.conf /etc/gai.conf
-RUN chmod +x /usr/local/bin/work_container-entrypoint /usr/local/bin/work-container-vpn-updown
+RUN chmod +x /usr/local/bin/work_container-entrypoint /usr/local/bin/work-container-vpn-updown /usr/local/bin/work-container-sfdx-auth-watch
 
 ENTRYPOINT ["/usr/local/bin/work_container-entrypoint"]
 CMD ["bash"]

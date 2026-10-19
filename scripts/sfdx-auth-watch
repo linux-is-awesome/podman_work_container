@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Watch APP_HOME/.sfdx org auth files for rewrite storms (SF VS Code/Cursor
+# extension bug after sleep: salesforcedx-vscode#8470). On storm, kill Code/Cursor
+# extension hosts by cmdline pattern (never cache PIDs) so Electron respawns them.
+set -euo pipefail
+
+WINDOW_SECS="${SFDX_AUTH_STORM_WINDOW_SECS:-30}"
+THRESHOLD="${SFDX_AUTH_STORM_THRESHOLD:-20}"
+COOLDOWN_SECS="${SFDX_AUTH_STORM_COOLDOWN_SECS:-60}"
+SFDX_DIR="${SFDX_AUTH_DIR:-${HOME}/.sfdx}"
+
+if ! command -v inotifywait >/dev/null 2>&1; then
+  echo "sfdx auth watch: inotifywait missing; disabled." >&2
+  exit 0
+fi
+
+if [[ -z "${HOME:-}" ]]; then
+  echo "sfdx auth watch: HOME unset; disabled." >&2
+  exit 0
+fi
+
+is_auth_file() {
+  local name="$1"
+  [[ "${name}" == *.json ]] || return 1
+  [[ "${name}" == *@* ]] || return 1
+  case "${name}" in
+    alias.json|key.json|sfdx-config.json) return 1 ;;
+  esac
+  return 0
+}
+
+# Kill by live process cmdline each time — PIDs may change after respawn.
+kill_extension_hosts() {
+  pkill -f '/usr/share/code/code.*--inspect-port=0' 2>/dev/null || true
+  pkill -f '/usr/share/cursor/cursor.*--inspect-port=0' 2>/dev/null || true
+  pkill -f 'extensionHost' 2>/dev/null || true
+}
+
+declare -A EVENT_TS=()
+LAST_KILL_EPOCH=0
+
+prune_and_count() {
+  local file="$1"
+  local now="$2"
+  local cutoff=$((now - WINDOW_SECS))
+  local kept=()
+  local t
+  for t in ${EVENT_TS[${file}]:-}; do
+    if (( t > cutoff )); then
+      kept+=("${t}")
+    fi
+  done
+  kept+=("${now}")
+  EVENT_TS[${file}]="${kept[*]}"
+  echo "${#kept[@]}"
+}
+
+handle_storm() {
+  local file="$1"
+  local count="$2"
+  local now
+  now="$(date +%s)"
+  if (( now - LAST_KILL_EPOCH < COOLDOWN_SECS )); then
+    return 0
+  fi
+  LAST_KILL_EPOCH="${now}"
+  echo "sfdx auth watch: rewrite storm on ${file} (${count} events / ${WINDOW_SECS}s); restarting Code/Cursor extension hosts"
+  kill_extension_hosts
+}
+
+watch_once() {
+  local name count now
+  while [[ ! -d "${SFDX_DIR}" ]]; do
+    sleep 5
+  done
+
+  echo "sfdx auth watch: watching ${SFDX_DIR} (threshold ${THRESHOLD}/${WINDOW_SECS}s)"
+
+  # close_write/moved_to catch atomic rewrites; create covers new org auth files.
+  while IFS= read -r name; do
+    is_auth_file "${name}" || continue
+    now="$(date +%s)"
+    count="$(prune_and_count "${name}" "${now}")"
+    if (( count >= THRESHOLD )); then
+      handle_storm "${name}" "${count}"
+    fi
+  done < <(inotifywait -m -e close_write,moved_to,create --format '%f' "${SFDX_DIR}" 2>/dev/null)
+}
+
+while true; do
+  watch_once || true
+  sleep 2
+done
