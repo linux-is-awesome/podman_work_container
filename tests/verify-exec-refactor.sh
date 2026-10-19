@@ -22,7 +22,7 @@ require_container() {
 # --- static checks ---
 for f in host-podman-exec exec-in service-start install host-mounts resolve-paths \
   app-runners/chrome-work-open app-runners/vscode-work-open app-runners/cursor-work-open \
-  wrappers/work-container-app; do
+  app-runners/github-desktop-work-open wrappers/work-container-app; do
   bash -n "${HOST_SCRIPTS_DIR}/${f}" || { fail "syntax ${f}"; exit 1; }
 done
 pass "bash -n on all critical host scripts"
@@ -97,12 +97,12 @@ else
   pass "container BROWSER=/usr/local/bin/chrome-work-open"
 fi
 
-for dest in /usr/local/bin/chrome-work-open /usr/bin/google-chrome-stable /usr/bin/code; do
+for dest in /usr/local/bin/chrome-work-open /usr/bin/google-chrome-stable /usr/bin/code /usr/bin/cursor /usr/bin/github-desktop; do
   if ! sudo podman exec work_container test -e "${dest}"; then
     fail "missing mount ${dest}"
   fi
 done
-pass "chrome/code bind mounts present"
+pass "chrome/code/cursor/github-desktop bind mounts present"
 
 chrome_exec="$(sudo podman exec work_container grep -c 'exec /opt/google/chrome/chrome' /usr/local/bin/chrome-work-open 2>/dev/null || echo 0)"
 if [[ "${chrome_exec}" -lt 1 ]]; then

@@ -9,7 +9,7 @@ RUNNER_BIN="${WORK_CONTAINER_RUNNER_BIN:-/usr/local/bin/work-container-app}"
 
 mkdir -p "${TARGET_DIR}"
 
-for file in google-chrome-work.desktop firefox-work.desktop vscode-work.desktop cursor-work.desktop; do
+for file in google-chrome-work.desktop firefox-work.desktop vscode-work.desktop cursor-work.desktop github-desktop-work.desktop; do
   src="${SOURCE_DIR}/${file}"
   dst="${TARGET_DIR}/${file}"
   if [[ ! -f "${src}" ]]; then
@@ -25,6 +25,7 @@ update-desktop-database "${TARGET_DIR}" >/dev/null 2>&1 || true
 echo "Desktop launchers installed (MIME handlers registered). Look for:"
 echo "- Google Chrome (Work) / Firefox (Work) — default browser candidates"
 echo "- VS Code (Work) / Cursor (Work) — default text editor candidates"
+echo "- GitHub Desktop (Work)"
 echo "Pick them in Settings → Default Applications, or e.g.:"
 echo "  xdg-settings set default-web-browser google-chrome-work.desktop"
 echo "  xdg-mime default vscode-work.desktop text/plain"

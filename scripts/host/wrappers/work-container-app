@@ -5,7 +5,7 @@ set -euo pipefail
 source /usr/local/lib/work_container/scripts/host-podman-exec
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: work-container-app <google-chrome|firefox|vscode|cursor|sf> [args...]" >&2
+  echo "Usage: work-container-app <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]" >&2
   exit 1
 fi
 
@@ -54,6 +54,9 @@ case "${APP}" in
     ;;
   cursor)
     CMD=(cursor "$@")
+    ;;
+  github-desktop|github)
+    CMD=(github-desktop "$@")
     ;;
   sf|sfdx)
     CMD=(sf "$@")

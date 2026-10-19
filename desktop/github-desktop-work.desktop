@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=GitHub Desktop (Work)
+Comment=GitHub Desktop from work_container
+Exec=__RUNNER_BIN__ github-desktop %U
+Icon=github-desktop
+Terminal=false
+Categories=Development;RevisionControl;
+MimeType=x-scheme-handler/x-github-client;x-scheme-handler/x-github-desktop-auth;x-scheme-handler/x-github-desktop-dev-auth;
+StartupNotify=true
+StartupWMClass=GitHub Desktop
