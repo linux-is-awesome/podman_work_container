@@ -3,7 +3,7 @@
 Single Podman container (`work_container` image and service) with:
 - StrongSwan VPN client (inside the container)
 - Salesforce CLI (`sf`)
-- mise (runtime version manager; default `config/bashrc` seeds APP_HOME; `mise install` stores Node/Java/etc. under `~/.containers/work_container/home`)
+- mise (runtime version manager; default `config/shell/bashrc` seeds APP_HOME; `mise install` stores Node/Java/etc. under `~/.containers/work_container/home`)
 - pipx (CLI Python apps into APP_HOME; image includes `python3` / `python3-venv`)
 - Google Chrome
 - Firefox ESR
@@ -67,10 +67,10 @@ Run:
 ./start configure-vpn
 ```
 
-This creates `config/vpn.env`.
+This creates `config/vpn/vpn.env`.
 
-If needed, edit `config/vpn.env` manually later (username/password/server/options).  
-Optionally edit `config/swanctl.conf.template` for advanced changes.  
+If needed, edit `config/vpn/vpn.env` manually later (username/password/server/options).  
+Optionally edit `config/vpn/swanctl.conf.template` for advanced changes.  
 This file is mounted from host, so no rebuild is required.
 
 Proxy settings are separate in `config/proxy.env` (optional).  
@@ -80,7 +80,7 @@ Create it from template when needed:
 cp config/proxy.env.template config/proxy.env
 ```
 
-Proxy server template is in `config/tinyproxy.conf.template` (mounted from host).
+Proxy server template is in `config/proxy/tinyproxy.conf.template` (mounted from host).
 
 Certificate sources used by the container:
 - project snapshot: `certs/host` (from `./start sync-certs`)
@@ -228,11 +228,11 @@ so container tools/apps can work with your normal files.
 
 This keeps container app settings isolated from your normal host app configs.
 
-`work-shell` and VS Code integrated terminals use that path as `HOME`. Default `~/.bashrc` / `~/.profile` are seeded from `config/bashrc` and `config/profile` on first `service-start` (mise activate included). Edit the live files under `~/.containers/work_container/home/` or change the shipped templates in `config/`.
+`work-shell` and VS Code integrated terminals use that path as `HOME`. Default `~/.bashrc` / `~/.profile` are seeded from `config/shell/bashrc` and `config/shell/profile` on first `service-start` (mise activate included). Edit the live files under `~/.containers/work_container/home/` or change the shipped templates in `config/`.
 
 ## 5) Update VPN settings without rebuild
 
-Edit `config/vpn.env` and/or `config/swanctl.conf.template`, then restart container:
+Edit `config/vpn/vpn.env` and/or `config/vpn/swanctl.conf.template`, then restart container:
 
 ```bash
 ./start run
@@ -324,8 +324,8 @@ Your scripts already keep portable archives at:
 - `service-start` also mounts host display/runtime resources, `/dev/dri`, `/dev/snd`, and DBus socket for GUI/GPU/audio integration.
 - `service-start` and `run` mount host timezone files (`/etc/localtime`, `/etc/timezone`) and pass `TZ` so container local time matches host.
 - `service-start` runs with `apparmor=unconfined` to allow DBus access from container apps.
-- VPN credentials are stored in `config/vpn.env` on host, not baked into image.
-- VPN DNS is applied automatically from the gateway (`scripts/vpn-updown` on CHILD_SA up); Podman-injected host LAN DNS is not used for tunnel traffic.
+- VPN credentials are stored in `config/vpn/vpn.env` on host, not baked into image.
+- VPN DNS is applied automatically from the gateway (`scripts/container/vpn-updown` on CHILD_SA up); Podman-injected host LAN DNS is not used for tunnel traffic.
 - `Public egress IP` in logs is a DNS-dependent connectivity check, not a kill-switch allowlist.
 - If VPN or DNS is not ready at startup, the container keeps running and the entrypoint watchdog retries (same behavior after a later drop).
 - Browsers can look “stuck” if apps try **IPv6** first while the tunnel is **IPv4-only**; the image disables IPv6 in the container and clamps TCP MSS for IPsec. Some sites may still be slower than on host VPN due to corporate gateway limits.

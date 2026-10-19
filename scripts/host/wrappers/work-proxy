@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SERVICE_NAME="work_container.service"
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "${SERVICE_NAME}"
+fi
+
+for _ in $(seq 1 30); do
+  if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+    break
+  fi
+  sleep 1
+done
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  echo "work_container is not running." >&2
+  exit 1
+fi
+
+sudo podman logs -f work_container 2>&1 | grep -Ei 'tinyproxy|connect|request|opensock|upstream|client|closed connection'

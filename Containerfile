@@ -108,13 +108,13 @@ RUN arch="$(dpkg --print-architecture)" \
 ENV MISE_INSTALL_PATH=/usr/local/bin/mise
 RUN curl -fsSL https://mise.run | sh
 
-COPY scripts/entrypoint /usr/local/bin/work_container-entrypoint
-COPY scripts/vpn-updown /usr/local/bin/work-container-vpn-updown
-COPY scripts/sfdx-auth-watch /usr/local/bin/work-container-sfdx-auth-watch
-COPY config/charon-updown-dns.conf /etc/strongswan.d/charon/zz-updown-dns.conf
-COPY config/charon-kernel-netlink-mss.conf /etc/strongswan.d/charon/zz-kernel-netlink-mss.conf
-COPY config/charon-tunnel.conf /etc/strongswan.d/charon/zz-tunnel.conf
-COPY config/gai.conf /etc/gai.conf
+COPY scripts/container/entrypoint /usr/local/bin/work_container-entrypoint
+COPY scripts/container/vpn-updown /usr/local/bin/work-container-vpn-updown
+COPY scripts/container/sfdx-auth-watch /usr/local/bin/work-container-sfdx-auth-watch
+COPY config/vpn/charon-updown-dns.conf /etc/strongswan.d/charon/zz-updown-dns.conf
+COPY config/vpn/charon-kernel-netlink-mss.conf /etc/strongswan.d/charon/zz-kernel-netlink-mss.conf
+COPY config/vpn/charon-tunnel.conf /etc/strongswan.d/charon/zz-tunnel.conf
+COPY config/vpn/gai.conf /etc/gai.conf
 RUN chmod +x /usr/local/bin/work_container-entrypoint /usr/local/bin/work-container-vpn-updown /usr/local/bin/work-container-sfdx-auth-watch
 
 ENTRYPOINT ["/usr/local/bin/work_container-entrypoint"]

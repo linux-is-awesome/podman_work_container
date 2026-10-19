@@ -6,18 +6,19 @@ add_host_mounts() {
   local script_dir="$2"
   local host_home="$3"
 
-  if [[ -x "${script_dir}/chrome-work-open" ]]; then
-    _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
-    _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/local/bin/google-chrome:ro")
-    _mount_args+=("-v" "${script_dir}/chrome-work-open:/usr/bin/google-chrome-stable:ro")
+  local runners_dir="${script_dir}/app-runners"
+  if [[ -x "${runners_dir}/chrome-work-open" ]]; then
+    _mount_args+=("-v" "${runners_dir}/chrome-work-open:/usr/local/bin/chrome-work-open:ro")
+    _mount_args+=("-v" "${runners_dir}/chrome-work-open:/usr/local/bin/google-chrome:ro")
+    _mount_args+=("-v" "${runners_dir}/chrome-work-open:/usr/bin/google-chrome-stable:ro")
   fi
 
-  if [[ -x "${script_dir}/vscode-work-open" ]]; then
-    _mount_args+=("-v" "${script_dir}/vscode-work-open:/usr/bin/code:ro")
+  if [[ -x "${runners_dir}/vscode-work-open" ]]; then
+    _mount_args+=("-v" "${runners_dir}/vscode-work-open:/usr/bin/code:ro")
   fi
 
-  if [[ -x "${script_dir}/cursor-work-open" ]]; then
-    _mount_args+=("-v" "${script_dir}/cursor-work-open:/usr/bin/cursor:ro")
+  if [[ -x "${runners_dir}/cursor-work-open" ]]; then
+    _mount_args+=("-v" "${runners_dir}/cursor-work-open:/usr/bin/cursor:ro")
   fi
 
   if [[ -d /etc/fonts ]]; then

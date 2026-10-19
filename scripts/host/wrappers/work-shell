@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/work_container/scripts/host-podman-exec
+
+SERVICE_NAME="work_container.service"
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "${SERVICE_NAME}"
+fi
+
+if [[ $# -eq 0 ]]; then
+  work_container_exec_as_user -e PS1='work-shell# ' -- bash -i
+else
+  work_container_exec_as_user -- "$@"
+fi
