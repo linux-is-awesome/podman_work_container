@@ -85,6 +85,13 @@ RUN curl -fsSL https://downloads.cursor.com/keys/anysphere.asc | gpg --dearmor -
     && apt-get install -y --no-install-recommends cursor \
     && rm -rf /var/lib/apt/lists/*
 
+# Install GitHub Desktop (shiftkey Linux port) from the mwt apt mirror.
+RUN curl -fsSL https://mirror.mwt.me/shiftkey-desktop/gpgkey | gpg --dearmor -o /usr/share/keyrings/mwt-desktop.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/mwt-desktop.gpg] https://mirror.mwt.me/shiftkey-desktop/deb/ any main" > /etc/apt/sources.list.d/mwt-desktop.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends github-desktop \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Salesforce CLI.
 RUN curl -fsSL https://developer.salesforce.com/media/salesforce-cli/sf/channels/stable/sf-linux-x64.tar.xz -o /tmp/sf.tar.xz \
     && mkdir -p /opt/sf \

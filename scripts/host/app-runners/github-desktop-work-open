@@ -1,0 +1,8 @@
+#!/bin/sh
+# Bind-mounted on /usr/bin/github-desktop (symlink target: /usr/lib/github-desktop/github-desktop).
+# Must exec the Electron binary, not the /usr/bin path (that path is this script).
+exec /usr/lib/github-desktop/github-desktop \
+  --no-sandbox \
+  --disable-gpu-sandbox \
+  --ozone-platform=wayland \
+  "$@"

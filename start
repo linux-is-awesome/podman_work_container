@@ -62,12 +62,15 @@ run_app() {
     cursor)
       run_cmd exec-in cursor "$@"
       ;;
+    github-desktop|github)
+      run_cmd exec-in github-desktop "$@"
+      ;;
     sf|sfdx)
       run_cmd exec-in sf "$@"
       ;;
     *)
       echo "Unknown app: ${app}" >&2
-      echo "Supported apps: google-chrome, firefox, vscode, cursor, sf" >&2
+      echo "Supported apps: google-chrome, firefox, vscode, cursor, github-desktop, sf" >&2
       exit 1
       ;;
   esac
@@ -78,7 +81,7 @@ print_help() {
   echo
   echo "${C_BOLD}Usage${C_RESET}"
   echo "  ./start <command> [args...]"
-  echo "  ./start app <google-chrome|firefox|vscode|cursor|sf> [args...]"
+  echo "  ./start app <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]"
   echo
   echo "${C_BOLD}Commands${C_RESET}"
   echo "  ${C_GREEN}build${C_RESET}"
@@ -93,13 +96,14 @@ print_help() {
   echo "  ${C_GREEN}service-stop${C_RESET}"
   echo "  ${C_GREEN}service-status${C_RESET}"
   echo "  ${C_GREEN}exec-in${C_RESET} <command> [args...]"
-  echo "  ${C_MAGENTA}app${C_RESET} <google-chrome|firefox|vscode|cursor|sf> [args...]"
+  echo "  ${C_MAGENTA}app${C_RESET} <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]"
   echo
   echo "${C_BOLD}Examples${C_RESET}"
   echo "  ./start app google-chrome"
   echo "  ./start app firefox"
   echo "  ./start app vscode"
   echo "  ./start app cursor"
+  echo "  ./start app github-desktop"
   echo "  ./start app sf --version"
 }
 
@@ -140,8 +144,9 @@ ${C_BOLD}${C_MAGENTA}Apps${C_RESET}
   [11] Open Firefox
   [12] Open VS Code
   [13] Open Cursor
-  [14] Run Salesforce CLI (sf)
-  [15] Run custom command in service (exec-in)
+  [14] Open GitHub Desktop
+  [15] Run Salesforce CLI (sf)
+  [16] Run custom command in service (exec-in)
 
 ${C_BOLD}${C_CYAN}Other${C_RESET}
   [h] Help
@@ -171,7 +176,8 @@ EOF
       11) run_app firefox; pause ;;
       12) run_app vscode; pause ;;
       13) run_app cursor; pause ;;
-      14)
+      14) run_app github-desktop; pause ;;
+      15)
         read -r -p "sf args (blank=--version): " sf_args
         if [[ -n "${sf_args}" ]]; then
           # shellcheck disable=SC2206
@@ -182,7 +188,7 @@ EOF
         fi
         pause
         ;;
-      15)
+      16)
         read -r -p "Command to run inside service: " cmdline
         if [[ -n "${cmdline}" ]]; then
           # shellcheck disable=SC2206

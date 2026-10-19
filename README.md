@@ -9,6 +9,7 @@ Single Podman container (`work_container` image and service) with:
 - Firefox ESR
 - Visual Studio Code
 - Cursor
+- GitHub Desktop
 
 The host does **not** need to be connected to VPN.  
 The container uses a kill-switch policy: if VPN is not up, container egress stays blocked. IPv4 internet traffic must match IPsec policy; IPv6 is dropped (`ip6tables` + `disable_ipv6`). TCP to the Podman bridge gateway is only for host-side dev/Chrome, not general internet egress.
