@@ -3,6 +3,9 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="${PROJECT_DIR}/scripts"
+HOST_SCRIPTS_DIR="${SCRIPTS_DIR}/host"
+DEV_SCRIPTS_DIR="${SCRIPTS_DIR}/dev"
+
 if [[ -t 1 ]]; then
   C_RESET=$'\033[0m'
   C_BOLD=$'\033[1m'
@@ -19,10 +22,28 @@ else
   C_MAGENTA=""
 fi
 
+resolve_cmd_path() {
+  local cmd="$1"
+  case "${cmd}" in
+    build|clear-build-cache|configure-vpn)
+      echo "${DEV_SCRIPTS_DIR}/${cmd}"
+      ;;
+    install|uninstall|run|sync-certs|service-start|service-stop|service-status|exec-in|install-desktop)
+      echo "${HOST_SCRIPTS_DIR}/${cmd}"
+      ;;
+    *)
+      echo "Unknown command script: ${cmd}" >&2
+      return 1
+      ;;
+  esac
+}
+
 run_cmd() {
   local cmd="$1"
   shift || true
-  "${SCRIPTS_DIR}/${cmd}" "$@"
+  local path
+  path="$(resolve_cmd_path "${cmd}")"
+  "${path}" "$@"
 }
 
 run_app() {

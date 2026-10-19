@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${PROJECT_DIR}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
-  "${SCRIPT_DIR}/sync-certs" >/dev/null
+HOST_SCRIPTS_DIR="${PROJECT_DIR}/scripts/host"
+if [[ -x "${HOST_SCRIPTS_DIR}/sync-certs" ]]; then
+  "${HOST_SCRIPTS_DIR}/sync-certs" >/dev/null
 fi
 
 IMAGE_REPO="work_container"

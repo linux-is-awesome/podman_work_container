@@ -22,9 +22,10 @@ If user instructions conflict with `agents/AGENT_CONTEXT.md`, follow the user an
 ## Consistency rules (must follow)
 
 - **No backward compatibility.** Do not add migration shims, dual paths, install-time removal of obsolete files, or fallbacks for old names/config unless the user explicitly asks in the current session.
-- Keep behavior consistent across `run`, `service-start`, `service-status`, and installed runtime under `/usr/local/lib/work_container`.
+- Keep behavior consistent across `scripts/host/{run,service-start,service-status}`, and installed runtime under `/usr/local/lib/work_container`.
+- Script layout: `scripts/host/` (host/install/runtime), `scripts/container/` (image entrypoint), `scripts/dev/` (build/configure).
 - For config-driven features, use the same pattern as VPN:
-  - host templates/configs under `config/`
+  - host templates/configs under `config/{vpn,proxy,shell}/`
   - runtime-rendered configs under `/etc/...` inside container
   - do not introduce one-off runtime config locations when an established pattern exists.
 - Status output must report real runtime state (health/socket/process/log-backed checks), not optimistic/configured values.

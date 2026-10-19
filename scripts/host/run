@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=resolve-paths
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
 cd "${PROJECT_DIR}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
   "${SCRIPT_DIR}/sync-certs" >/dev/null
 fi
@@ -16,7 +16,6 @@ source "${SCRIPT_DIR}/runtime-status"
 
 IMAGE_NAME_PREFIX="work_container"
 CONTAINER_NAME="work_container"
-CONFIG_DIR="${PROJECT_DIR}/config"
 IMAGE_DIR="${PROJECT_DIR}/containers"
 CERTS_DIR="${PROJECT_DIR}/certs"
 REQUESTED_VERSION=""
@@ -41,19 +40,19 @@ if [[ $# -gt 0 ]]; then
   TTY_ARGS=()
 fi
 
-if [[ ! -f "${CONFIG_DIR}/vpn.env" ]]; then
-  echo "Missing ${CONFIG_DIR}/vpn.env. Run ./start configure-vpn first." >&2
+if [[ ! -f "${CONFIG_DIR}/vpn/vpn.env" ]]; then
+  echo "Missing ${CONFIG_DIR}/vpn/vpn.env. Run ./start configure-vpn first." >&2
   exit 1
 fi
 
-if [[ ! -f "${CONFIG_DIR}/swanctl.conf.template" ]]; then
-  echo "Missing ${CONFIG_DIR}/swanctl.conf.template" >&2
+if [[ ! -f "${CONFIG_DIR}/vpn/swanctl.conf.template" ]]; then
+  echo "Missing ${CONFIG_DIR}/vpn/swanctl.conf.template" >&2
   exit 1
 fi
 
-if [[ -f "${CONFIG_DIR}/proxy.env" ]]; then
+if [[ -f "${CONFIG_DIR}/proxy/proxy.env" ]]; then
   # shellcheck disable=SC1090
-  source "${CONFIG_DIR}/proxy.env"
+  source "${CONFIG_DIR}/proxy/proxy.env"
 fi
 NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
 

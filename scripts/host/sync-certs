@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=resolve-paths
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
 HOST_CERT_SRC="/etc/ssl/certs"
 TARGET_DIR="${PROJECT_DIR}/certs/host"
 

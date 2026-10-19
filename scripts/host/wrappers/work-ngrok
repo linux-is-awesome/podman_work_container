@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/work_container/scripts/host-podman-exec
+
+SERVICE_NAME="work_container.service"
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage:" >&2
+  echo "  work-ngrok auth <ngrok-authtoken>" >&2
+  echo "  work-ngrok <host-port> [ngrok args...]" >&2
+  exit 1
+fi
+
+MODE="$1"
+shift || true
+
+ensure_work_container_app_home
+mkdir -p "$(work_container_app_home_dir)/.config/ngrok"
+
+if [[ "${MODE}" == "auth" ]]; then
+  if [[ $# -ne 1 ]]; then
+    echo "Usage: work-ngrok auth <ngrok-authtoken>" >&2
+    exit 1
+  fi
+
+  work_container_exec_as_user -- ngrok config add-authtoken "$1"
+  exit $?
+fi
+
+HOST_PORT="${MODE}"
+
+if [[ ! "${HOST_PORT}" =~ ^[0-9]+$ ]] || (( HOST_PORT < 1 || HOST_PORT > 65535 )); then
+  echo "Invalid host port: ${HOST_PORT}" >&2
+  exit 1
+fi
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "${SERVICE_NAME}"
+fi
+
+for _ in $(seq 1 30); do
+  if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+    break
+  fi
+  sleep 1
+done
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  echo "work_container is not running." >&2
+  exit 1
+fi
+
+TARGET_HOST="10.88.0.1"
+if sudo podman exec work_container sh -lc 'getent hosts host.containers.internal >/dev/null 2>&1'; then
+  TARGET_HOST="host.containers.internal"
+fi
+
+work_container_exec_as_user -- ngrok http "http://${TARGET_HOST}:${HOST_PORT}" "$@"

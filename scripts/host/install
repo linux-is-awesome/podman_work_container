@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=resolve-paths
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
+HOST_SCRIPTS_DIR="${SCRIPT_DIR}"
+DEV_SCRIPTS_DIR="${PROJECT_DIR}/scripts/dev"
+source "${HOST_SCRIPTS_DIR}/image-utils"
+CONTAINERS_DIR="${PROJECT_DIR}/containers"
+HOME_CONTAINERS_DIR="${HOME}/.containers"
+SERVICE_NAME="work_container.service"
+SYSTEMD_UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}"
+CURRENT_USER="$(id -un)"
+CURRENT_UID="$(id -u)"
+CURRENT_GID="$(id -g)"
+CURRENT_HOME="${HOME}"
+PODMAN_PATH="$(command -v podman)"
+SYSTEMCTL_PATH="$(command -v systemctl)"
+SUDOERS_PATH="/etc/sudoers.d/work_container-${CURRENT_USER}"
+SYSTEM_RUNNER_BIN="/usr/local/bin/work-container-app"
+SF_WRAPPER_BIN="/usr/local/bin/sf"
+SFDX_WRAPPER_BIN="/usr/local/bin/sfdx"
+WORK_SHELL_BIN="/usr/local/bin/work-shell"
+WORK_NGROK_BIN="/usr/local/bin/work-ngrok"
+WORK_PROXY_BIN="/usr/local/bin/work-proxy"
+RUNTIME_BASE="/usr/local/lib/work_container"
+RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/scripts"
+HOME_STATE_DIR="${CURRENT_HOME}/.containers/work_container"
+HOME_STATE_APP_DIR="${HOME_STATE_DIR}/home"
+
+ensure_user_dirs() {
+  mkdir -p "${CONTAINERS_DIR}" "${HOME_CONTAINERS_DIR}"
+  mkdir -p "${HOME_STATE_APP_DIR}/.config" "${HOME_STATE_APP_DIR}/.cache" "${HOME_STATE_APP_DIR}/.local/share"
+}
+
+ensure_built_image() {
+  local latest_image
+  latest_image="$(find_latest_image "${CONTAINERS_DIR}")"
+  if [[ -z "${latest_image}" ]]; then
+    echo "No built container image file found. Building now..."
+    "${DEV_SCRIPTS_DIR}/build"
+  fi
+}
+
+sync_home_container_image() {
+  local latest_image target_image
+  mkdir -p "${HOME_CONTAINERS_DIR}"
+  latest_image="$(find_latest_image "${CONTAINERS_DIR}")"
+  if [[ -z "${latest_image}" ]]; then
+    echo "No source image file found in ${CONTAINERS_DIR}" >&2
+    exit 1
+  fi
+  target_image="${HOME_CONTAINERS_DIR}/$(basename "${latest_image}")"
+  rm -f "${HOME_CONTAINERS_DIR}"/work_container-*.oci
+  cp -f "${latest_image}" "${target_image}"
+  echo "Synced latest image file to ${target_image}"
+}
+
+install_host_wrappers() {
+  local wrappers_dir="${HOST_SCRIPTS_DIR}/wrappers"
+  sudo cp -f "${wrappers_dir}/work-container-app" "${SYSTEM_RUNNER_BIN}"
+  sudo cp -f "${wrappers_dir}/sf" "${SF_WRAPPER_BIN}"
+  sudo cp -f "${wrappers_dir}/sfdx" "${SFDX_WRAPPER_BIN}"
+  sudo cp -f "${wrappers_dir}/work-shell" "${WORK_SHELL_BIN}"
+  sudo cp -f "${wrappers_dir}/work-ngrok" "${WORK_NGROK_BIN}"
+  sudo cp -f "${wrappers_dir}/work-proxy" "${WORK_PROXY_BIN}"
+  sudo chmod 755 \
+    "${SYSTEM_RUNNER_BIN}" \
+    "${SF_WRAPPER_BIN}" \
+    "${SFDX_WRAPPER_BIN}" \
+    "${WORK_SHELL_BIN}" \
+    "${WORK_NGROK_BIN}" \
+    "${WORK_PROXY_BIN}"
+  echo "Installed host wrappers: ${SYSTEM_RUNNER_BIN}, ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}, ${WORK_SHELL_BIN}, ${WORK_NGROK_BIN}, ${WORK_PROXY_BIN}"
+}
+
+install_runtime_bundle() {
+  local runtime_script
+  sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config" "${RUNTIME_BASE}/certs"
+
+  # Flatten host runtime scripts into RUNTIME_SCRIPTS_DIR (systemd WorkingDirectory expects this).
+  for runtime_script in \
+    resolve-paths \
+    service-start \
+    service-stop \
+    service-status \
+    sync-certs \
+    host-mounts \
+    host-podman-exec \
+    host-gtk-settings \
+    image-utils \
+    runtime-status
+  do
+    sudo cp -f "${HOST_SCRIPTS_DIR}/${runtime_script}" "${RUNTIME_SCRIPTS_DIR}/${runtime_script}"
+  done
+
+  sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}/app-runners"
+  sudo cp -a "${HOST_SCRIPTS_DIR}/app-runners/." "${RUNTIME_SCRIPTS_DIR}/app-runners/"
+
+  sudo cp -a "${PROJECT_DIR}/config/." "${RUNTIME_BASE}/config/"
+  if [[ -d "${PROJECT_DIR}/certs" ]]; then
+    sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
+  fi
+
+  sudo find "${RUNTIME_SCRIPTS_DIR}" -type f -exec chmod 755 {} +
+  echo "Installed runtime bundle: ${RUNTIME_BASE}"
+}
+
+install_systemd_service() {
+  local unit_content
+  unit_content="$(cat <<EOF
+[Unit]
+Description=work_container service
+After=network-online.target
+Wants=network-online.target
+After=systemd-user-sessions.service graphical.target display-manager.service
+Wants=graphical.target
+RequiresMountsFor=${CURRENT_HOME}
+RequiresMountsFor=${HOME_CONTAINERS_DIR}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${RUNTIME_BASE}
+Environment=WORK_CONTAINER_PODMAN_BIN=podman
+Environment=WORK_CONTAINER_HOST_HOME=${CURRENT_HOME}
+Environment=WORK_CONTAINER_HOST_UID=${CURRENT_UID}
+Environment=WORK_CONTAINER_HOST_GID=${CURRENT_GID}
+Environment=WORK_CONTAINER_HOST_RUNTIME_DIR=/run/user/${CURRENT_UID}
+Environment=WORK_CONTAINER_IMAGE_DIR=${HOME_CONTAINERS_DIR}
+Environment=WORK_CONTAINER_WAIT_FOR_GUI=1
+Environment=WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT=300
+Environment=WORK_CONTAINER_WAIT_FOR_PAYLOAD=1
+Environment=WORK_CONTAINER_WAIT_FOR_PAYLOAD_TIMEOUT=300
+ExecStart=${RUNTIME_SCRIPTS_DIR}/service-start
+ExecStop=${RUNTIME_SCRIPTS_DIR}/service-stop
+ExecReload=${RUNTIME_SCRIPTS_DIR}/service-stop
+ExecReload=${RUNTIME_SCRIPTS_DIR}/service-start
+TimeoutStartSec=180
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+)"
+
+  echo "${unit_content}" | sudo tee "${SYSTEMD_UNIT_PATH}" >/dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl disable "${SERVICE_NAME}" >/dev/null 2>&1 || true
+  echo "Installed systemd service (on-demand start): ${SERVICE_NAME}"
+}
+
+install_sudoers_rule() {
+  local rule
+  rule="${CURRENT_USER} ALL=(root) NOPASSWD: ${PODMAN_PATH}, ${SYSTEMCTL_PATH} start ${SERVICE_NAME}, ${SYSTEMCTL_PATH} restart ${SERVICE_NAME}"
+  echo "${rule}" | sudo tee "${SUDOERS_PATH}" >/dev/null
+  sudo chmod 440 "${SUDOERS_PATH}"
+  echo "Installed sudoers rule for passwordless podman: ${SUDOERS_PATH}"
+}
+
+restart_service() {
+  if ! sudo systemctl restart "${SERVICE_NAME}"; then
+    echo "Failed to restart ${SERVICE_NAME} after install." >&2
+    exit 1
+  fi
+
+  for _ in $(seq 1 30); do
+    if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+      echo "Restarted service and refreshed running container: ${SERVICE_NAME}"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "Service restarted but work_container is not running." >&2
+  exit 1
+}
+
+echo "Installing/updating work_container integration..."
+ensure_user_dirs
+ensure_built_image
+sync_home_container_image
+install_runtime_bundle
+install_host_wrappers
+WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${HOST_SCRIPTS_DIR}/install-desktop"
+install_sudoers_rule
+install_systemd_service
+restart_service
+
+echo
+echo "Install complete."
+echo "- Desktop entries updated"
+echo "- Runtime bundle installed: ${RUNTIME_BASE}"
+echo "- App runner installed: ${SYSTEM_RUNNER_BIN}"
+echo "- sf/sfdx wrappers installed: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
+echo "- shell wrapper installed: ${WORK_SHELL_BIN}"
+echo "- ngrok wrapper installed: ${WORK_NGROK_BIN}"
+echo "- proxy log wrapper installed: ${WORK_PROXY_BIN}"
+echo "- Passwordless sudo for podman/systemctl-start/restart installed (${SUDOERS_PATH})"
+echo "- Service installed and restarted: ${SERVICE_NAME}"

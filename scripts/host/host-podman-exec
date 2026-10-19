@@ -18,15 +18,22 @@ work_container_app_home_dir() {
 work_container_config_dir() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  echo "$(cd "${script_dir}/.." && pwd)/config"
+  if [[ -f "${script_dir}/../../Containerfile" ]]; then
+    echo "$(cd "${script_dir}/../.." && pwd)/config"
+  elif [[ -d "${script_dir}/../config" ]]; then
+    echo "$(cd "${script_dir}/.." && pwd)/config"
+  else
+    echo "Cannot resolve config dir from ${script_dir}" >&2
+    return 1
+  fi
 }
 
-# Seed APP_HOME shell rc from shipped config/bashrc and config/profile when missing.
+# Seed APP_HOME shell rc from shipped config/shell/{bashrc,profile} when missing.
 ensure_work_container_shell_rc() {
   local app_home="$1"
   local config_dir="$2"
-  local bashrc_src="${config_dir}/bashrc"
-  local profile_src="${config_dir}/profile"
+  local bashrc_src="${config_dir}/shell/bashrc"
+  local profile_src="${config_dir}/shell/profile"
 
   if [[ ! -f "${bashrc_src}" ]]; then
     echo "Missing shipped shell config: ${bashrc_src}" >&2
