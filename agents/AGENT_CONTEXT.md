@@ -39,7 +39,8 @@
 - Session D-Bus for portals (color picker / screencast): `service-start`/`run` set `DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus` and `XDG_SESSION_TYPE=wayland`; GUI exec always forwards the same via `podman_append_gui_session_env` so Chrome/VS Code can reach host `xdg-desktop-portal` PickColor.
 - Host timezone: `work_container_host_timezone` resolves IANA zone (timedatectl, `/etc/timezone`, `/etc/localtime`); `service-start`/`run` set `TZ` and mount `/usr/share/zoneinfo/<zone>` on `/etc/localtime` (symlink bind-mount is unreliable). GUI exec passes `TZ` via `podman_append_gui_session_env` (Chrome needs `TZ`, not only `/etc/localtime`).
 - `mise` is baked into the image at `/usr/local/bin/mise`. User-installed runtimes (`mise install`) persist under `~/.containers/work_container/home` (container `HOME` / `XDG_*`), not in the image layer. Default shell rc ships in `config/bashrc` (includes `mise activate`) and `config/profile`; `service-start` copies them into APP_HOME when `~/.bashrc` / `~/.profile` are missing. `work-shell` runs `bash -i` (normal rc files). Image also includes `pipx` (+ `python3`/`python3-venv`) for CLI apps into APP_HOME.
-- Agent/file tooling in the image from Debian repos only (no compilers, no extra tool repos): `rg` (ripgrep), `fd` (symlink to Debian `fdfind`), `jq`, `yq` (Debian/`python3-yq`), `unzip`/`zip`, `file`, `rsync`, `sqlite3`, `tree`, `xxd`, `lsof`. Build toolchains and third-party CLIs (`gh`, etc.) stay out; install per project via `mise`/apt when needed.
+- Agent/file tooling in the image from Debian repos only (no compilers, no extra tool repos): `rg` (ripgrep), `fd` (symlink to Debian `fdfind`), `jq`, `yq` (Debian/`python3-yq`), `unzip`/`zip`, `file`, `rsync`, `sqlite3`, `tree`, `xxd`, `lsof`, `inotify-tools`. Build toolchains and third-party CLIs (`gh`, etc.) stay out; install per project via `mise`/apt when needed.
+- SF auth storm watch (`scripts/sfdx-auth-watch`, image `/usr/local/bin/work-container-sfdx-auth-watch`): started from `entrypoint`; `inotifywait` on `$HOME/.sfdx` org auth `*@*.json` (skips alias/key/config). If ≥20 close_write/moved_to/create events on one file in 30s (workaround for salesforcedx-vscode#8470 after sleep), kill Code/Cursor extension hosts via cmdline patterns (`--inspect-port=0`, `extensionHost`) — never cache PIDs; 60s cooldown; Electron respawns hosts. No notifications, no Salesforce API calls. Tunables: `SFDX_AUTH_STORM_THRESHOLD`, `SFDX_AUTH_STORM_WINDOW_SECS`, `SFDX_AUTH_STORM_COOLDOWN_SECS`, `SFDX_AUTH_DIR`.
 
 ## Font/GTK Strategy (Current)
 - Keep host font/fontconfig mounts in `scripts/host-mounts`, including:
@@ -63,6 +64,7 @@
 - `scripts/exec-in`
 - `scripts/entrypoint`
 - `scripts/vpn-updown`
+- `scripts/sfdx-auth-watch` (SF extension auth-storm → kill extension hosts)
 - `scripts/host-mounts` (fonts, USB passthrough)
 - `scripts/vscode-work-open` / `scripts/cursor-work-open` (GUI Electron launchers)
 - `scripts/host-gtk-settings`

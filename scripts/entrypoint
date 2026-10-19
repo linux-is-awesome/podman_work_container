@@ -310,6 +310,14 @@ fi
 # Start watchdog only after the first connect attempt (avoids false "CHILD_SA missing" while IKE is still starting).
 vpn_watchdog "${VPN_READY}" &
 
+# SF extension auth rewrite storm after host sleep (salesforcedx-vscode#8470):
+# restart Code/Cursor extension hosts by cmdline pattern (no cached PIDs).
+if [[ -x /usr/local/bin/work-container-sfdx-auth-watch ]]; then
+  /usr/local/bin/work-container-sfdx-auth-watch &
+else
+  echo "sfdx auth watch: helper missing; disabled." >&2
+fi
+
 if [[ -n "${TINYPROXY_BIN}" ]]; then
   if [[ ! -f "${PROXY_TEMPLATE_FILE}" ]]; then
     echo "Missing template: ${PROXY_TEMPLATE_FILE}; HTTP proxy disabled." >&2
