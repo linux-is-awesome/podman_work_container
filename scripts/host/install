@@ -33,6 +33,23 @@ ensure_user_dirs() {
   mkdir -p "${HOME_STATE_APP_DIR}/.config" "${HOME_STATE_APP_DIR}/.cache" "${HOME_STATE_APP_DIR}/.local/share"
 }
 
+install_agent_context() {
+  local agents_src="${CONFIG_DIR}/agent/AGENTS.md"
+  local cursor_rule_src="${CONFIG_DIR}/agent/cursor-work-container.mdc"
+  local cursor_rules_dir="${HOME_STATE_APP_DIR}/.cursor/rules"
+
+  if [[ ! -f "${agents_src}" ]]; then
+    echo "Missing shipped agent briefing: ${agents_src}" >&2
+    return 1
+  fi
+
+  cp "${agents_src}" "${HOME_STATE_APP_DIR}/AGENTS.md"
+  mkdir -p "${cursor_rules_dir}"
+  if [[ -f "${cursor_rule_src}" ]]; then
+    cp "${cursor_rule_src}" "${cursor_rules_dir}/work-container.mdc"
+  fi
+}
+
 ensure_built_image() {
   local latest_image
   latest_image="$(find_latest_image "${CONTAINERS_DIR}")"
@@ -186,6 +203,7 @@ ensure_built_image
 sync_home_container_image
 install_runtime_bundle
 install_host_wrappers
+install_agent_context
 WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${HOST_SCRIPTS_DIR}/install-desktop"
 install_sudoers_rule
 install_systemd_service
