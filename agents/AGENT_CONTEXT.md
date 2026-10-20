@@ -19,7 +19,8 @@
 ## Config layout
 - `config/vpn/` — `vpn.env`, `vpn.env.example`, `swanctl.conf.template`, charon-*, `gai.conf`
 - `config/proxy/` — `tinyproxy.conf.template`, `proxy.env` / `proxy.env.template`
-- `config/shell/` — `bashrc`, `profile` (seeded into APP_HOME)
+- `config/shell/` — `bashrc`, `profile` (seeded into APP_HOME when missing)
+- `config/agent/` — `AGENTS.md` + Cursor `cursor-work-container.mdc` (`alwaysApply`); install copies them into APP_HOME `~/AGENTS.md` and `~/.cursor/rules/work-container.mdc`
 
 ## Non-Negotiables
 - Keep **project scripts** and **installed runtime behavior** aligned.

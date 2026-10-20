@@ -232,6 +232,15 @@ This keeps container app settings isolated from your normal host app configs.
 
 `work-shell` and VS Code integrated terminals use that path as `HOME`. Default `~/.bashrc` / `~/.profile` are seeded from `config/shell/bashrc` and `config/shell/profile` on first `service-start` (mise activate included). Edit the live files under `~/.containers/work_container/home/` or change the shipped templates in `config/`.
 
+### Cursor agents in the container
+
+`./start install` installs into container `HOME`:
+
+- `~/AGENTS.md` — short briefing (container vs host, host bridges)
+- `~/.cursor/rules/work-container.mdc` — Cursor `alwaysApply` rule pointing at `~/AGENTS.md`
+
+Templates live under `config/agent/`.
+
 ### Host shell from inside the container (`host-shell`)
 
 Some workflows need a **host** shell (host binaries, host `~`) while you stay in the same project path. From a container terminal:
