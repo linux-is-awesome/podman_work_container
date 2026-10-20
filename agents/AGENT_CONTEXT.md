@@ -28,8 +28,8 @@
 - **No backward compatibility.** Never add migration shims, dual code paths, renamed-file cleanup in install/uninstall, “support old config/layout” branches, or deprecated-option handling unless the user explicitly requests it in the current session.
 
 ## Current Important Behaviors
-- Container `HOME` / `XDG_*` / `BROWSER` / `WORK_CONTAINER_HOST_HOME` are set once in `service-start` (`work_container_run_app_home_env`); all `podman exec` paths inherit them. App config lives under `~/.containers/work_container/home`. Host home is bind-mounted at the same path for projects/fonts; service/work-shell start cwd is host home.
-- `sf`/`sfdx` run with `--workdir "${PWD}"` so project resolution follows caller dir.
+- Container `HOME` / `XDG_*` / `BROWSER` / `WORK_CONTAINER_HOST_HOME` are set once in `service-start` (`work_container_run_app_home_env`); all `podman exec` paths inherit them. App config lives under `~/.containers/work_container/home`. Host home is bind-mounted at the same path for projects/fonts; service start cwd is host home.
+- `sf`/`sfdx`, `work-container-app`, and `exec-in` pass `--workdir "${PWD}"` so the container session follows the caller’s directory (must exist in the container, typically under the bind-mounted host home). `work-shell` does the same when `PWD` exists in the container; otherwise it falls back to `--workdir "${HOME}"` (probe via `test -d`) so the shell still opens.
 - `service-status` checks running container first, then image availability.
 - VPN watchdog in `scripts/container/entrypoint`: retries every 2s while unhealthy, every 10s when tunnel+DNS OK; checks CHILD_SA and DNS (`getent`), not IKE name alone; logs `VPN watchdog: network OK (tunnel and DNS working again)` plus public egress IP when recovering after a drop (not duplicated if already healthy at startup).
 - IKEv2 DPD: `dpd_delay = 10s` set on the connection in `config/vpn/swanctl.conf.template` (charon default is disabled/0s); `dpd_timeout` has no effect on IKEv2 so it is not set. Child `dpd_action = restart` re-initiates the CHILD_SA under a fresh IKE_SA when DPD detects the peer is unresponsive.

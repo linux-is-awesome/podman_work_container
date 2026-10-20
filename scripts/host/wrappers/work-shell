@@ -10,8 +10,21 @@ if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container
   sudo systemctl restart "${SERVICE_NAME}"
 fi
 
+# Prefer caller PWD when that path exists in the container; otherwise host home
+# (same default as service-start -w).
+WORKDIR="${HOME}"
+if [[ -n "${PWD:-}" ]]; then
+  WORK_CONTAINER_EXEC_STDIO=probe
+  if work_container_exec_as_user -- test -d "${PWD}" >/dev/null 2>&1; then
+    WORKDIR="${PWD}"
+  fi
+  unset WORK_CONTAINER_EXEC_STDIO
+fi
+
+EXEC_ARGS=(--workdir "${WORKDIR}")
+
 if [[ $# -eq 0 ]]; then
-  work_container_exec_as_user -e PS1='work-shell# ' -- bash -i
+  work_container_exec_as_user "${EXEC_ARGS[@]}" -e PS1='work-shell# ' -- bash -i
 else
-  work_container_exec_as_user -- "$@"
+  work_container_exec_as_user "${EXEC_ARGS[@]}" -- "$@"
 fi
