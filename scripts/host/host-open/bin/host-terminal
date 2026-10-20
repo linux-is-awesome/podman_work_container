@@ -1,0 +1,107 @@
+#!/bin/sh
+# Host-open handler: open the host default terminal via xdg-terminal-exec
+# (session-bus StartTransientUnit + /bin/bash -c; systemd-run --user cannot
+# reach the host user-manager private socket from the container).
+#
+# Accepts common terminal CLIs (GHD, gnome-terminal, kgx, konsole, kitty, …)
+# and empty argv with spawn cwd (VS Code/Cursor Open in External Terminal).
+# Opens a normal host shell, auto-runs work-shell, then returns to host bash
+# when work-shell exits. Optional -e/-x/-- command runs via work-shell first.
+#
+# Path probes: list aliases in host-open/bind-paths.list (mounted generically).
+set -eu
+
+WORK_SHELL_BIN="${WORK_SHELL_BIN:-/usr/local/bin/work-shell}"
+
+workdir=
+# Remaining "$@" after option parse = optional command (run inside work-shell).
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --working-directory|--workdir|--directory|--dir|-cd|-d|-w)
+      workdir=$2
+      shift 2
+      ;;
+    --working-directory=*|--workdir=*|--directory=*|--dir=*)
+      workdir=${1#*=}
+      shift
+      ;;
+    -e|-x|--)
+      shift
+      break
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      if [ -z "${workdir}" ] && [ -d "$1" ]; then
+        workdir=$1
+        shift
+      else
+        break
+      fi
+      ;;
+  esac
+done
+
+if [ -z "${workdir}" ]; then
+  workdir=${PWD:-${HOME}}
+fi
+
+if [ ! -d "${workdir}" ]; then
+  echo "host-terminal: not a directory: ${workdir}" >&2
+  exit 1
+fi
+
+workdir=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "${workdir}")
+
+# Host interactive bash: run work-shell (optionally with args), then stay on host.
+cmd=$(
+  python3 -c '
+import shlex, sys
+workdir = sys.argv[1]
+work_shell = sys.argv[2]
+argv = sys.argv[3:]
+inner = shlex.quote(work_shell)
+if argv:
+    inner += " " + " ".join(shlex.quote(a) for a in argv)
+# -i so rc files apply; after work-shell exits, replace with a fresh host shell.
+shell_cmd = inner + "; exec bash"
+parts = [
+    "xdg-terminal-exec",
+    "--dir=" + workdir,
+    "--",
+    "bash",
+    "-ic",
+    shell_cmd,
+]
+print("exec " + " ".join(shlex.quote(p) for p in parts))
+' "${workdir}" "${WORK_SHELL_BIN}" "$@"
+)
+
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+: "${DBUS_SESSION_BUS_ADDRESS:=unix:path=${XDG_RUNTIME_DIR}/bus}"
+export XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
+
+unit="work-host-terminal-$$.service"
+
+# StartTransientUnit on the session bus runs ExecStart in the host namespace;
+# wrap with /bin/bash so the client need not resolve host-only binaries.
+exec busctl --user call \
+  org.freedesktop.systemd1 \
+  /org/freedesktop/systemd1 \
+  org.freedesktop.systemd1.Manager \
+  StartTransientUnit \
+  -- \
+  ssa\(sv\)a\(sa\(sv\)\) \
+  "${unit}" \
+  replace \
+  4 \
+  Description s "work-container host terminal" \
+  CollectMode s inactive-or-failed \
+  Environment as 4 \
+    "DISPLAY=${DISPLAY:-:0}" \
+    "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}" \
+    "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" \
+    "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}" \
+  ExecStart a\(sasb\) 1 /bin/bash 3 /bin/bash -c "${cmd}" false \
+  0

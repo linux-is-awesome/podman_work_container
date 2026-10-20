@@ -1,0 +1,10 @@
+# Extra container paths for host-open handlers (in addition to /usr/local/bin/<name>).
+# Format: <bin-name> <absolute-container-path>
+# host-mounts bind-mounts bin/<bin-name> onto each listed path.
+# Used when apps probe fixed binaries instead of MIME/desktop (e.g. terminals).
+
+# VS Code / Cursor (Debian image → x-terminal-emulator)
+host-terminal /usr/bin/x-terminal-emulator
+
+# GitHub Desktop (first Linux shell probe)
+host-terminal /usr/bin/gnome-terminal

@@ -1,0 +1,5 @@
+# Container → host open bridges (see scripts/host/host-open/).
+# Add MIME / scheme handlers here as new host-open apps are introduced.
+# Keep http(s) out of this file so APP_HOME / BROWSER keep VPN Chrome.
+[Default Applications]
+inode/directory=host-file-manager.desktop
