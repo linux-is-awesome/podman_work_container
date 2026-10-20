@@ -1,0 +1,62 @@
+#!/bin/sh
+# Host-open handler: open a path in the host default file manager.
+#
+# Wired as the inode/directory MIME handler (see config/xdg/mimeapps.list and
+# applications/host-file-manager.desktop) so xdg-open / Electron openPath do
+# not fall back to BROWSER (Chrome file:// tabs).
+#
+# Calls FileManager1 from the container often activate Nautilus as a service
+# without raising a window. Open on the host instead (same StartTransientUnit
+# pattern as host-terminal) so the host session runs xdg-open properly.
+#
+# To add another host-open bridge: bin/<name>, optional applications/<name>.desktop +
+# config/xdg/mimeapps.list (MIME), and/or bind-paths.list lines for fixed probe paths.
+# host-mounts mounts bin/*, applications/*, mimeapps, and bind-paths.list generically.
+set -eu
+
+if [ $# -lt 1 ] || [ -z "$1" ]; then
+  echo "usage: host-file-manager <path-or-file-uri>" >&2
+  exit 1
+fi
+
+target=$1
+case "${target}" in
+  file://*)
+    target=$(python3 -c 'import sys; from urllib.parse import unquote, urlparse; print(unquote(urlparse(sys.argv[1]).path))' "${target}")
+    ;;
+esac
+
+if [ ! -e "${target}" ]; then
+  echo "host-file-manager: not found: ${target}" >&2
+  exit 1
+fi
+
+target=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "${target}")
+qtarget=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${target}")
+cmd="exec xdg-open ${qtarget}"
+
+: "${XDG_RUNTIME_DIR:=/run/user/$(id -u)}"
+: "${DBUS_SESSION_BUS_ADDRESS:=unix:path=${XDG_RUNTIME_DIR}/bus}"
+export XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
+
+unit="work-host-file-manager-$$.service"
+
+exec busctl --user call \
+  org.freedesktop.systemd1 \
+  /org/freedesktop/systemd1 \
+  org.freedesktop.systemd1.Manager \
+  StartTransientUnit \
+  -- \
+  ssa\(sv\)a\(sa\(sv\)\) \
+  "${unit}" \
+  replace \
+  4 \
+  Description s "work-container host file manager" \
+  CollectMode s inactive-or-failed \
+  Environment as 4 \
+    "DISPLAY=${DISPLAY:-:0}" \
+    "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}" \
+    "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" \
+    "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}" \
+  ExecStart a\(sasb\) 1 /bin/bash 3 /bin/bash -c "${cmd}" false \
+  0

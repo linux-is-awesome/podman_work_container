@@ -96,6 +96,10 @@ install_runtime_bundle() {
 
   sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}/app-runners"
   sudo cp -a "${HOST_SCRIPTS_DIR}/app-runners/." "${RUNTIME_SCRIPTS_DIR}/app-runners/"
+  if [[ -d "${HOST_SCRIPTS_DIR}/host-open" ]]; then
+    sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}/host-open"
+    sudo cp -a "${HOST_SCRIPTS_DIR}/host-open/." "${RUNTIME_SCRIPTS_DIR}/host-open/"
+  fi
 
   sudo cp -a "${PROJECT_DIR}/config/." "${RUNTIME_BASE}/config/"
   if [[ -d "${PROJECT_DIR}/certs" ]]; then

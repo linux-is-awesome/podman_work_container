@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vainfo \
     xz-utils \
     xdg-utils \
+    libglib2.0-bin \
     yq \
     zip \
     firefox-esr \

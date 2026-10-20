@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Host File Manager
+Comment=Open paths in the host default file manager (FileManager1)
+Exec=/usr/local/bin/host-file-manager %f
+Icon=system-file-manager
+Terminal=false
+NoDisplay=true
+MimeType=inode/directory;
+Categories=System;FileManager;
