@@ -115,6 +115,12 @@ RUN arch="$(dpkg --print-architecture)" \
 ENV MISE_INSTALL_PATH=/usr/local/bin/mise
 RUN curl -fsSL https://mise.run | sh
 
+# Install Cursor CLI (`agent`) system-wide. Auth/config live under APP_HOME at runtime.
+# Official installer targets $HOME/.local; use a fixed HOME so the binary is not under /root.
+RUN curl -fsSL https://cursor.com/install | HOME=/opt/cursor-agent NO_COLOR=1 bash \
+    && ln -sfn /opt/cursor-agent/.local/bin/agent /usr/local/bin/agent \
+    && ln -sfn /opt/cursor-agent/.local/bin/cursor-agent /usr/local/bin/cursor-agent
+
 COPY scripts/container/entrypoint /usr/local/bin/work_container-entrypoint
 COPY scripts/container/vpn-updown /usr/local/bin/work-container-vpn-updown
 COPY scripts/container/sfdx-auth-watch /usr/local/bin/work-container-sfdx-auth-watch

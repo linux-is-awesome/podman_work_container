@@ -8,7 +8,8 @@ Single Podman container (`work_container` image and service) with:
 - Google Chrome
 - Firefox ESR
 - Visual Studio Code
-- Cursor
+- Cursor (IDE)
+- Cursor CLI (`agent`; use via `work-shell`)
 - GitHub Desktop
 
 The host does **not** need to be connected to VPN.  
