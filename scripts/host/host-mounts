@@ -21,8 +21,10 @@ add_host_mounts() {
     _mount_args+=("-v" "${runners_dir}/cursor-work-open:/usr/bin/cursor:ro")
   fi
 
+  # Not /usr/bin/github-desktop: that symlink resolves to the Electron binary and
+  # podman follows it, so the mount would overwrite the file the runner must exec.
   if [[ -x "${runners_dir}/github-desktop-work-open" ]]; then
-    _mount_args+=("-v" "${runners_dir}/github-desktop-work-open:/usr/bin/github-desktop:ro")
+    _mount_args+=("-v" "${runners_dir}/github-desktop-work-open:/usr/local/bin/github-desktop:ro")
   fi
 
   if [[ -d /etc/fonts ]]; then
