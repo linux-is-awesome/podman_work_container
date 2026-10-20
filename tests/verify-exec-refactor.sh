@@ -97,7 +97,7 @@ else
   pass "container BROWSER=/usr/local/bin/chrome-work-open"
 fi
 
-for dest in /usr/local/bin/chrome-work-open /usr/bin/google-chrome-stable /usr/bin/code /usr/bin/cursor /usr/bin/github-desktop; do
+for dest in /usr/local/bin/chrome-work-open /usr/bin/google-chrome-stable /usr/bin/code /usr/bin/cursor /usr/local/bin/github-desktop; do
   if ! sudo podman exec work_container test -e "${dest}"; then
     fail "missing mount ${dest}"
   fi
