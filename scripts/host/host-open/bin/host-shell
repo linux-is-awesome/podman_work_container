@@ -1,0 +1,77 @@
+#!/bin/sh
+# Jump to an interactive host shell at the current directory (same path on the
+# host bind-mount). Ensures the host user's SSH pubkey is authorized so
+# passwordless ssh USER@host.containers.internal works (OpenSSH uses passwd
+# home for keys, not APP_HOME).
+#
+# Usage:
+#   host-shell              # interactive host shell at $PWD
+#   host-shell -c 'cmd…'    # run a command on the host at $PWD (task-friendly)
+set -eu
+
+HOST="${WORK_CONTAINER_SSH_HOST:-host.containers.internal}"
+REMOTE_USER="${WORK_CONTAINER_SSH_USER:-$(id -un)}"
+
+passwd_home=$(getent passwd "$(id -un)" | cut -d: -f6)
+HOST_HOME="${WORK_CONTAINER_HOST_HOME:-${passwd_home}}"
+
+ensure_host_ssh_auth() {
+  ssh_dir="${HOST_HOME}/.ssh"
+  auth_keys="${ssh_dir}/authorized_keys"
+
+  if [ ! -d "${HOST_HOME}" ]; then
+    echo "host-shell: host home not found: ${HOST_HOME}" >&2
+    return 1
+  fi
+
+  mkdir -p "${ssh_dir}"
+  chmod 700 "${ssh_dir}"
+
+  pubkey=""
+  for candidate in id_ed25519.pub id_ecdsa.pub id_rsa.pub; do
+    if [ -f "${ssh_dir}/${candidate}" ]; then
+      pubkey="${ssh_dir}/${candidate}"
+      break
+    fi
+  done
+
+  if [ -z "${pubkey}" ]; then
+    echo "host-shell: no SSH public key in ${ssh_dir}" >&2
+    echo "Generate one on the host first, e.g.: ssh-keygen -t ed25519" >&2
+    return 1
+  fi
+
+  key_line=$(tr -d '\r' < "${pubkey}" | head -n1)
+  if [ -z "${key_line}" ]; then
+    echo "host-shell: empty public key: ${pubkey}" >&2
+    return 1
+  fi
+
+  touch "${auth_keys}"
+  chmod 600 "${auth_keys}"
+
+  if ! grep -qxF "${key_line}" "${auth_keys}"; then
+    printf '%s\n' "${key_line}" >> "${auth_keys}"
+    echo "host-shell: authorized ${pubkey} for container→host SSH"
+  fi
+}
+
+ensure_host_ssh_auth
+
+cwd=$(pwd)
+qcwd=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${cwd}")
+remote_prefix="cd ${qcwd} 2>/dev/null || cd \"\$HOME\""
+
+if [ "${1:-}" = "-c" ]; then
+  shift
+  if [ $# -eq 0 ]; then
+    echo "host-shell: -c requires a command" >&2
+    exit 1
+  fi
+  # Join remaining args (vscode may pass one string or split words).
+  cmd=$*
+  qcmd=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${cmd}")
+  exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix} && exec bash -lc ${qcmd}"
+fi
+
+exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix} && exec \${SHELL:-bash} -i"

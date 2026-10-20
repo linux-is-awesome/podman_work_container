@@ -232,6 +232,46 @@ This keeps container app settings isolated from your normal host app configs.
 
 `work-shell` and VS Code integrated terminals use that path as `HOME`. Default `~/.bashrc` / `~/.profile` are seeded from `config/shell/bashrc` and `config/shell/profile` on first `service-start` (mise activate included). Edit the live files under `~/.containers/work_container/home/` or change the shipped templates in `config/`.
 
+### Host shell from inside the container (`host-shell`)
+
+Some workflows need a **host** shell (host binaries, host `~`) while you stay in the same project path. From a container terminal:
+
+```bash
+host-shell              # interactive host shell at the current directory
+host-shell -c 'pwd'     # run one command on the host at the current directory
+```
+
+`host-shell` is bind-mounted into the container at `/usr/local/bin/host-shell`. It:
+
+- authorizes the host user’s SSH public key in `~/.ssh/authorized_keys` if needed (passwordless `ssh` to the host)
+- opens `ssh` to `host.containers.internal` as your user
+- `cd`s to the same path you had in the container (host home is mounted at the same absolute paths)
+
+Requirements: host `sshd` listening (reachable as `host.containers.internal`), and a host key such as `~/.ssh/id_ed25519` (create with `ssh-keygen -t ed25519` on the host if missing). After the first successful authorize, further `host-shell` calls should not ask for a password.
+
+#### Use host shell as the default in VS Code / Cursor (one project only)
+
+In **that** project’s `.vscode/settings.json` (not user settings), so other projects keep the container bash:
+
+```json
+{
+  "terminal.integrated.profiles.linux": {
+    "Host": {
+      "path": "host-shell"
+    }
+  },
+  "terminal.integrated.defaultProfile.linux": "Host",
+  "terminal.integrated.automationProfile.linux": {
+    "path": "host-shell"
+  }
+}
+```
+
+- `defaultProfile` — new integrated terminals
+- `automationProfile` — tasks / automation terminals (needed so tasks use the host without editing each task)
+
+Open the folder in Cursor/VS Code **inside the work container** (e.g. Cursor Work). New terminals and shell tasks then run on the host at the workspace path. Omit these settings in other projects to keep container `bash`.
+
 ## 5) Update VPN settings without rebuild
 
 Edit `config/vpn/vpn.env` and/or `config/vpn/swanctl.conf.template`, then restart container:
