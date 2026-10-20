@@ -93,7 +93,7 @@ install_host_wrappers() {
 
 install_runtime_bundle() {
   local runtime_script
-  sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config" "${RUNTIME_BASE}/certs"
+  sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}" "${RUNTIME_BASE}/config"
 
   # Flatten host runtime scripts into RUNTIME_SCRIPTS_DIR (systemd WorkingDirectory expects this).
   for runtime_script in \
@@ -101,7 +101,6 @@ install_runtime_bundle() {
     service-start \
     service-stop \
     service-status \
-    sync-certs \
     host-mounts \
     host-podman-exec \
     host-gtk-settings \
@@ -119,9 +118,6 @@ install_runtime_bundle() {
   fi
 
   sudo cp -a "${PROJECT_DIR}/config/." "${RUNTIME_BASE}/config/"
-  if [[ -d "${PROJECT_DIR}/certs" ]]; then
-    sudo cp -a "${PROJECT_DIR}/certs/." "${RUNTIME_BASE}/certs/" 2>/dev/null || true
-  fi
 
   sudo find "${RUNTIME_SCRIPTS_DIR}" -type f -exec chmod 755 {} +
   echo "Installed runtime bundle: ${RUNTIME_BASE}"

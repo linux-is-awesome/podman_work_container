@@ -4,11 +4,6 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${PROJECT_DIR}"
 
-HOST_SCRIPTS_DIR="${PROJECT_DIR}/scripts/host"
-if [[ -x "${HOST_SCRIPTS_DIR}/sync-certs" ]]; then
-  "${HOST_SCRIPTS_DIR}/sync-certs" >/dev/null
-fi
-
 IMAGE_REPO="work_container"
 IMAGE_DIR="${PROJECT_DIR}/containers"
 BUILD_VERSION="$(date +%Y%m%d-%H%M%S)"

@@ -6,8 +6,6 @@ VPN_ENV_FILE="${WORK_CONTAINER_VPN_ENV_FILE:-${CONFIG_DIR}/vpn/vpn.env}"
 VPN_TEMPLATE_FILE="${WORK_CONTAINER_SWANCTL_TEMPLATE:-${CONFIG_DIR}/vpn/swanctl.conf.template}"
 PROXY_TEMPLATE_FILE="${WORK_CONTAINER_TINYPROXY_TEMPLATE:-${CONFIG_DIR}/proxy/tinyproxy.conf.template}"
 PROXY_CONFIG_FILE="${WORK_CONTAINER_TINYPROXY_CONFIG:-/etc/tinyproxy/tinyproxy.conf}"
-PROJECT_CERTS_DIR="${WORK_CONTAINER_PROJECT_CERTS_DIR:-/project-certs}"
-
 if [[ -f "${VPN_ENV_FILE}" ]]; then
   # shellcheck disable=SC1090
   source "${VPN_ENV_FILE}"
@@ -75,13 +73,6 @@ export VPN_CONN VPN_CHILD VPN_SERVER VPN_SERVER_ADDR VPN_REMOTE_ID VPN_USERNAME 
 envsubst < "${VPN_TEMPLATE_FILE}" > /etc/swanctl/swanctl.conf
 
 mkdir -p /etc/swanctl/x509ca
-# Project certs first (portable snapshot + custom additions), then live host certs.
-if compgen -G "${PROJECT_CERTS_DIR}/host/*.pem" >/dev/null; then
-  cp -f "${PROJECT_CERTS_DIR}/host/"*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
-fi
-if compgen -G "${PROJECT_CERTS_DIR}/custom/*.pem" >/dev/null; then
-  cp -f "${PROJECT_CERTS_DIR}/custom/"*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
-fi
 if compgen -G "/etc/ssl/certs/*.pem" >/dev/null; then
   cp -f /etc/ssl/certs/*.pem /etc/swanctl/x509ca/ 2>/dev/null || true
 fi

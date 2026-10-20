@@ -5,9 +5,6 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
 cd "${PROJECT_DIR}"
 
-if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
-  "${SCRIPT_DIR}/sync-certs" >/dev/null
-fi
 source "${SCRIPT_DIR}/image-utils"
 source "${SCRIPT_DIR}/host-mounts"
 source "${SCRIPT_DIR}/host-podman-exec"
@@ -17,7 +14,6 @@ source "${SCRIPT_DIR}/runtime-status"
 IMAGE_NAME_PREFIX="work_container"
 CONTAINER_NAME="work_container"
 IMAGE_DIR="${PROJECT_DIR}/containers"
-CERTS_DIR="${PROJECT_DIR}/certs"
 REQUESTED_VERSION="${1:-}"
 PODMAN_BIN_CMD="${WORK_CONTAINER_PODMAN_BIN:-sudo podman}"
 read -r -a PODMAN_BIN <<< "${PODMAN_BIN_CMD}"
@@ -178,7 +174,6 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   --security-opt label=disable \
   --security-opt apparmor=unconfined \
   -v "${CONFIG_DIR}:/config:ro" \
-  -v "${CERTS_DIR}:/project-certs:ro" \
   -v "/etc/passwd:/etc/passwd:ro" \
   -v "/etc/group:/etc/group:ro" \
   -v "${HOST_HOME}:${HOST_HOME}:rw" \
