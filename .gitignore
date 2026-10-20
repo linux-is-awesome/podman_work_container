@@ -1,5 +1,4 @@
 config/vpn/vpn.env
 config/proxy/proxy.env
 containers/
-certs/host/*.pem
 .cursor/

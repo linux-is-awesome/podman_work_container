@@ -5,9 +5,6 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
 cd "${PROJECT_DIR}"
 
-if [[ -x "${SCRIPT_DIR}/sync-certs" ]]; then
-  "${SCRIPT_DIR}/sync-certs" >/dev/null
-fi
 source "${SCRIPT_DIR}/image-utils"
 source "${SCRIPT_DIR}/host-mounts"
 source "${SCRIPT_DIR}/host-podman-exec"
@@ -17,7 +14,6 @@ source "${SCRIPT_DIR}/runtime-status"
 IMAGE_NAME_PREFIX="work_container"
 CONTAINER_NAME="work_container"
 IMAGE_DIR="${PROJECT_DIR}/containers"
-CERTS_DIR="${PROJECT_DIR}/certs"
 REQUESTED_VERSION=""
 CMD=("bash")
 TTY_ARGS=("-it")
@@ -125,7 +121,6 @@ prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "$
   --security-opt label=disable \
   --security-opt apparmor=unconfined \
   -v "${CONFIG_DIR}:/config:ro" \
-  -v "${CERTS_DIR}:/project-certs:ro" \
   -v "/etc/passwd:/etc/passwd:ro" \
   -v "/etc/group:/etc/group:ro" \
   -e "TZ=${HOST_TIMEZONE}" \

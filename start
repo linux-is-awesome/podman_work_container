@@ -28,7 +28,7 @@ resolve_cmd_path() {
     build|clear-build-cache|configure-vpn)
       echo "${DEV_SCRIPTS_DIR}/${cmd}"
       ;;
-    install|uninstall|run|sync-certs|service-start|service-stop|service-status|exec-in|install-desktop)
+    install|uninstall|run|service-start|service-stop|service-status|exec-in|install-desktop)
       echo "${HOST_SCRIPTS_DIR}/${cmd}"
       ;;
     *)
@@ -87,7 +87,6 @@ print_help() {
   echo "  ${C_GREEN}build${C_RESET}"
   echo "  ${C_GREEN}clear-build-cache${C_RESET}  (force next build to fetch fresh app versions)"
   echo "  ${C_GREEN}run${C_RESET} [version] [-- command...]"
-  echo "  ${C_GREEN}sync-certs${C_RESET}"
   echo "  ${C_GREEN}install${C_RESET}"
   echo "  ${C_GREEN}uninstall${C_RESET}"
   echo "  ${C_GREEN}configure-vpn${C_RESET}"
@@ -128,25 +127,24 @@ interactive_menu() {
 ${C_BOLD}${C_GREEN}Core${C_RESET}
   [1] Build image
   [2] Run container shell
-  [3] Sync host certs to project
-  [4] Install/update system integration
-  [5] Uninstall system integration
-  [6] Configure VPN
+  [3] Install/update system integration
+  [4] Uninstall system integration
+  [5] Configure VPN
   [c] Clear build cache (force fresh app versions on next build)
 
 ${C_BOLD}${C_GREEN}Service${C_RESET}
-  [7] Start service
-  [8] Stop service
-  [9] Service status/logs
+  [6] Start service
+  [7] Stop service
+  [8] Service status/logs
 
 ${C_BOLD}${C_MAGENTA}Apps${C_RESET}
-  [10] Open Google Chrome
-  [11] Open Firefox
-  [12] Open VS Code
-  [13] Open Cursor
-  [14] Open GitHub Desktop
-  [15] Run Salesforce CLI (sf)
-  [16] Run custom command in service (exec-in)
+  [9] Open Google Chrome
+  [10] Open Firefox
+  [11] Open VS Code
+  [12] Open Cursor
+  [13] Open GitHub Desktop
+  [14] Run Salesforce CLI (sf)
+  [15] Run custom command in service (exec-in)
 
 ${C_BOLD}${C_CYAN}Other${C_RESET}
   [h] Help
@@ -157,27 +155,26 @@ EOF
     case "${choice}" in
       1) run_cmd build; pause ;;
       2) run_cmd run; pause ;;
-      3) run_cmd sync-certs; pause ;;
-      4)
+      3)
         run_cmd install
         pause
         ;;
-      5) run_cmd uninstall; pause ;;
-      6) run_cmd configure-vpn; pause ;;
+      4) run_cmd uninstall; pause ;;
+      5) run_cmd configure-vpn; pause ;;
       c|C) run_cmd clear-build-cache; pause ;;
-      7)
+      6)
         read -r -p "Optional build version (blank=latest): " ver
         if [[ -n "${ver}" ]]; then run_cmd service-start "${ver}"; else run_cmd service-start; fi
         pause
         ;;
-      8) run_cmd service-stop; pause ;;
-      9) run_cmd service-status; pause ;;
-      10) run_app google-chrome; pause ;;
-      11) run_app firefox; pause ;;
-      12) run_app vscode; pause ;;
-      13) run_app cursor; pause ;;
-      14) run_app github-desktop; pause ;;
-      15)
+      7) run_cmd service-stop; pause ;;
+      8) run_cmd service-status; pause ;;
+      9) run_app google-chrome; pause ;;
+      10) run_app firefox; pause ;;
+      11) run_app vscode; pause ;;
+      12) run_app cursor; pause ;;
+      13) run_app github-desktop; pause ;;
+      14)
         read -r -p "sf args (blank=--version): " sf_args
         if [[ -n "${sf_args}" ]]; then
           # shellcheck disable=SC2206
@@ -188,7 +185,7 @@ EOF
         fi
         pause
         ;;
-      16)
+      15)
         read -r -p "Command to run inside service: " cmdline
         if [[ -n "${cmdline}" ]]; then
           # shellcheck disable=SC2206
@@ -212,7 +209,7 @@ case "$1" in
   help|-h|--help)
     print_help
     ;;
-  build|clear-build-cache|run|sync-certs|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
+  build|clear-build-cache|run|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
     cmd="$1"
     shift
     run_cmd "${cmd}" "$@"

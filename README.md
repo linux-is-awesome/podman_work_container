@@ -52,17 +52,6 @@ To remove integration:
 
 ## 3) Configure VPN outside the container
 
-Host certs are synced automatically during:
-- `./start build`
-- `./start run`
-- `./start service-start`
-
-Manual sync is still available:
-
-```bash
-./start sync-certs
-```
-
 Run:
 
 ```bash
@@ -83,11 +72,6 @@ cp config/proxy.env.template config/proxy.env
 ```
 
 Proxy server template is in `config/proxy/tinyproxy.conf.template` (mounted from host).
-
-Certificate sources used by the container:
-- project snapshot: `certs/host` (from `./start sync-certs`)
-- project custom certs: `certs/custom`
-- live host cert store mounted in container
 
 ## 4) Build image
 
