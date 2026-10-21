@@ -4,7 +4,7 @@ set -euo pipefail
 # shellcheck source=resolve-paths
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
 HOST_SCRIPTS_DIR="${SCRIPT_DIR}"
-DEV_SCRIPTS_DIR="${PROJECT_DIR}/scripts/dev"
+DEV_SCRIPTS_DIR="${PROJECT_DIR}/src/dev"
 source "${HOST_SCRIPTS_DIR}/image-utils"
 CONTAINERS_DIR="${PROJECT_DIR}/containers"
 HOME_CONTAINERS_DIR="${HOME}/.containers"
@@ -24,7 +24,7 @@ WORK_SHELL_BIN="/usr/local/bin/work-shell"
 WORK_NGROK_BIN="/usr/local/bin/work-ngrok"
 WORK_PROXY_BIN="/usr/local/bin/work-proxy"
 RUNTIME_BASE="/usr/local/lib/work_container"
-RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/scripts"
+RUNTIME_SCRIPTS_DIR="${RUNTIME_BASE}/src"
 HOME_STATE_DIR="${CURRENT_HOME}/.containers/work_container"
 HOME_STATE_APP_DIR="${HOME_STATE_DIR}/home"
 

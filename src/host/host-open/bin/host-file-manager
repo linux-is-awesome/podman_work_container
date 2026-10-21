@@ -2,16 +2,16 @@
 # Host-open handler: open a path in the host default file manager.
 #
 # Wired as the inode/directory MIME handler (see config/xdg/mimeapps.list and
-# applications/host-file-manager.desktop) so xdg-open / Electron openPath do
+# apps/host-file-manager.desktop) so xdg-open / Electron openPath do
 # not fall back to BROWSER (Chrome file:// tabs).
 #
 # Calls FileManager1 from the container often activate Nautilus as a service
 # without raising a window. Open on the host instead (same StartTransientUnit
 # pattern as host-terminal) so the host session runs xdg-open properly.
 #
-# To add another host-open bridge: bin/<name>, optional applications/<name>.desktop +
+# To add another host-open bridge: bin/<name>, optional apps/<name>.desktop +
 # config/xdg/mimeapps.list (MIME), and/or bind-paths.list lines for fixed probe paths.
-# host-mounts mounts bin/*, applications/*, mimeapps, and bind-paths.list generically.
+# host-mounts mounts bin/*, apps/*, mimeapps, and bind-paths.list generically.
 set -eu
 
 if [ $# -lt 1 ] || [ -z "$1" ]; then

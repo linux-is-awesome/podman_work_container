@@ -122,9 +122,9 @@ RUN curl -fsSL https://cursor.com/install | HOME=/opt/cursor-agent NO_COLOR=1 ba
     && ln -sfn /opt/cursor-agent/.local/bin/agent /usr/local/bin/agent \
     && ln -sfn /opt/cursor-agent/.local/bin/cursor-agent /usr/local/bin/cursor-agent
 
-COPY scripts/container/entrypoint /usr/local/bin/work_container-entrypoint
-COPY scripts/container/vpn-updown /usr/local/bin/work-container-vpn-updown
-COPY scripts/container/sfdx-auth-watch /usr/local/bin/work-container-sfdx-auth-watch
+COPY src/container/entrypoint /usr/local/bin/work_container-entrypoint
+COPY src/container/vpn-updown /usr/local/bin/work-container-vpn-updown
+COPY src/container/sfdx-auth-watch /usr/local/bin/work-container-sfdx-auth-watch
 COPY config/vpn/charon-updown-dns.conf /etc/strongswan.d/charon/zz-updown-dns.conf
 COPY config/vpn/charon-kernel-netlink-mss.conf /etc/strongswan.d/charon/zz-kernel-netlink-mss.conf
 COPY config/vpn/charon-tunnel.conf /etc/strongswan.d/charon/zz-tunnel.conf

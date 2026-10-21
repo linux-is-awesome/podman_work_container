@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# shellcheck source=resolve-paths
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
+DESKTOP_DIR="${PROJECT_DIR}/src/host/desktop"
+APPS_SRC_DIR="${DESKTOP_DIR}/apps"
+ICON_SRC_DIR="${DESKTOP_DIR}/icons"
+TARGET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+ICON_DST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+RUNNER_BIN="${WORK_CONTAINER_RUNNER_BIN:-/usr/local/bin/work-container-app}"
+
+DESKTOP_FILES=(
+  google-chrome-work.desktop
+  firefox-work.desktop
+  vscode-work.desktop
+  cursor-work.desktop
+  github-desktop-work.desktop
+)
+
+# Icon basenames must match Icon= in the desktop files (Tela SVGs under src/host/desktop/icons/).
+ICON_FILES=(
+  com.google.ChromeDev.svg
+  firefox-dev.svg
+  code.svg
+  cursor.svg
+  github-desktop.svg
+)
+
+mkdir -p "${TARGET_DIR}" "${ICON_DST_DIR}"
+
+for icon in "${ICON_FILES[@]}"; do
+  src="${ICON_SRC_DIR}/${icon}"
+  if [[ ! -f "${src}" ]]; then
+    echo "Missing bundled icon: ${src}" >&2
+    exit 1
+  fi
+  cp -f "${src}" "${ICON_DST_DIR}/${icon}"
+  chmod 644 "${ICON_DST_DIR}/${icon}"
+  echo "Installed icon ${ICON_DST_DIR}/${icon}"
+done
+
+hicolor_dir="$(dirname "$(dirname "${ICON_DST_DIR}")")"
+gtk-update-icon-cache -f -t "${hicolor_dir}" >/dev/null 2>&1 || true
+
+for file in "${DESKTOP_FILES[@]}"; do
+  src="${APPS_SRC_DIR}/${file}"
+  dst="${TARGET_DIR}/${file}"
+  if [[ ! -f "${src}" ]]; then
+    echo "Missing desktop file: ${src}" >&2
+    exit 1
+  fi
+  sed -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" -e "s|__RUNNER_BIN__|${RUNNER_BIN}|g" "${src}" > "${dst}"
+  chmod 644 "${dst}"
+  echo "Installed ${dst}"
+done
+
+update-desktop-database "${TARGET_DIR}" >/dev/null 2>&1 || true
+echo "Desktop launchers installed (MIME handlers registered). Look for:"
+echo "- Google Chrome (Work) / Firefox (Work) — default browser candidates"
+echo "- VS Code (Work) / Cursor (Work) — default text editor candidates"
+echo "- GitHub Desktop (Work)"
+echo "Pick them in Settings → Default Applications, or e.g.:"
+echo "  xdg-settings set default-web-browser google-chrome-work.desktop"
+echo "  xdg-mime default vscode-work.desktop text/plain"

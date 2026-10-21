@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # shellcheck source=/dev/null
-source /usr/local/lib/work_container/scripts/host-podman-exec
+source /usr/local/lib/work_container/src/host-podman-exec
 
 SERVICE_NAME="work_container.service"
 
