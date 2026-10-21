@@ -3,7 +3,7 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOST_SCRIPTS_DIR="${PROJECT_DIR}/scripts/host"
+HOST_SCRIPTS_DIR="${PROJECT_DIR}/src/host"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 APP_HOME="${HOME}/.containers/work_container/home"
@@ -120,8 +120,8 @@ else
   pass "APP_HOME writes owned by host uid"
 fi
 
-if [[ -f /usr/local/lib/work_container/scripts/host-podman-exec ]]; then
-  if diff -q "${HOST_SCRIPTS_DIR}/host-podman-exec" /usr/local/lib/work_container/scripts/host-podman-exec >/dev/null 2>&1; then
+if [[ -f /usr/local/lib/work_container/src/host-podman-exec ]]; then
+  if diff -q "${HOST_SCRIPTS_DIR}/host-podman-exec" /usr/local/lib/work_container/src/host-podman-exec >/dev/null 2>&1; then
     pass "installed host-podman-exec matches project"
   else
     fail "installed host-podman-exec differs from project (re-run ./start install)"

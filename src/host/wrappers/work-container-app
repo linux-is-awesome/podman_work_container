@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # shellcheck source=/dev/null
-source /usr/local/lib/work_container/scripts/host-podman-exec
+source /usr/local/lib/work_container/src/host-podman-exec
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: work-container-app <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]" >&2

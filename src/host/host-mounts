@@ -27,9 +27,9 @@ add_host_mounts() {
     _mount_args+=("-v" "${runners_dir}/github-desktop-work-open:/usr/local/bin/github-desktop:ro")
   fi
 
-  # Host-open bridges (scripts/host/host-open/):
+  # Host-open bridges (src/host/host-open/):
   # - bin/* → /usr/local/bin/<name>
-  # - applications/*.desktop → /usr/local/share/applications/
+  # - apps/*.desktop → /usr/local/share/applications/
   # - bind-paths.list → extra probe-path mounts (bin/<name> → listed paths)
   # - config/xdg/mimeapps.list → /etc/xdg/mimeapps.list
   # Extend: add bin + optional desktop/MIME and/or bind-paths.list lines.
@@ -53,14 +53,22 @@ add_host_mounts() {
     done < "${host_open_bind_paths}"
   fi
   local host_open_desktop
-  if [[ -d "${host_open_dir}/applications" ]]; then
-    for host_open_desktop in "${host_open_dir}/applications"/*.desktop; do
+  if [[ -d "${host_open_dir}/apps" ]]; then
+    for host_open_desktop in "${host_open_dir}/apps"/*.desktop; do
       [[ -f "${host_open_desktop}" ]] || continue
       _mount_args+=("-v" "${host_open_desktop}:/usr/local/share/applications/$(basename "${host_open_desktop}"):ro")
     done
   fi
-  local xdg_mimeapps="${script_dir}/../config/xdg/mimeapps.list"
-  if [[ -f "${xdg_mimeapps}" ]]; then
+  local config_root xdg_mimeapps
+  if [[ -d "${script_dir}/../../config/xdg" ]]; then
+    config_root="${script_dir}/../../config"
+  elif [[ -d "${script_dir}/../config/xdg" ]]; then
+    config_root="${script_dir}/../config"
+  else
+    config_root=""
+  fi
+  xdg_mimeapps="${config_root}/xdg/mimeapps.list"
+  if [[ -n "${config_root}" && -f "${xdg_mimeapps}" ]]; then
     _mount_args+=("-v" "${xdg_mimeapps}:/etc/xdg/mimeapps.list:ro")
   fi
 

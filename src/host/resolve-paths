@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-# Source from scripts under scripts/host/ (project) or flattened runtime scripts dir.
+# Source from scripts under src/host/ (project) or flattened runtime src dir.
 # Sets: SCRIPT_DIR, PROJECT_DIR, CONFIG_DIR, HOST_SCRIPTS_DIR
 
 _caller="${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}"
@@ -8,10 +8,10 @@ SCRIPT_DIR="$(cd "$(dirname "${_caller}")" && pwd)"
 HOST_SCRIPTS_DIR="${SCRIPT_DIR}"
 
 if [[ -f "${SCRIPT_DIR}/../../Containerfile" ]]; then
-  # Project checkout: scripts/host/<this>
+  # Project checkout: src/host/<this>
   PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 elif [[ -d "${SCRIPT_DIR}/../config" ]]; then
-  # Installed runtime: /usr/local/lib/work_container/scripts/<this>
+  # Installed runtime: /usr/local/lib/work_container/src/<this>
   PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 else
   echo "Cannot resolve work_container project/runtime root from ${SCRIPT_DIR}" >&2

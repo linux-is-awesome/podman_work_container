@@ -54,7 +54,7 @@ Run:
 This command will:
 - build image if no build archive exists yet
 - copy latest build archive to `~/.containers` (old versions there are removed)
-- install/update desktop entries in `~/.local/share/applications`
+- install/update desktop entries in `~/.local/share/applications` and bundled Tela app icons into `~/.local/share/icons/hicolor/scalable/apps` (so launchers keep icons without the Tela theme)
 - install `sf`/`sfdx` wrapper binaries in `/usr/local/bin` to use container CLI
 - install `work-shell` at `/usr/local/bin/work-shell` (run on the host for an interactive shell in the running container)
 - install `work-ngrok` at `/usr/local/bin/work-ngrok` (run ngrok inside container for a host port)
@@ -380,7 +380,7 @@ Your scripts already keep portable archives at:
 - `service-start` and `run` mount host timezone files (`/etc/localtime`, `/etc/timezone`) and pass `TZ` so container local time matches host.
 - `service-start` runs with `apparmor=unconfined` to allow DBus access from container apps.
 - VPN credentials are stored in `config/vpn/vpn.env` on host, not baked into image.
-- VPN DNS is applied automatically from the gateway (`scripts/container/vpn-updown` on CHILD_SA up); Podman-injected host LAN DNS is not used for tunnel traffic.
+- VPN DNS is applied automatically from the gateway (`src/container/vpn-updown` on CHILD_SA up); Podman-injected host LAN DNS is not used for tunnel traffic.
 - `Public egress IP` in logs is a DNS-dependent connectivity check, not a kill-switch allowlist.
 - If VPN or DNS is not ready at startup, the container keeps running and the entrypoint watchdog retries (same behavior after a later drop).
 - Browsers can look “stuck” if apps try **IPv6** first while the tunnel is **IPv4-only**; the image disables IPv6 in the container and clamps TCP MSS for IPsec. Some sites may still be slower than on host VPN due to corporate gateway limits.

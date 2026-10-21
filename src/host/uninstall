@@ -15,9 +15,21 @@ WORK_PROXY_BIN="/usr/local/bin/work-proxy"
 RUNTIME_BASE="/usr/local/lib/work_container"
 
 remove_desktop_entries() {
+  local icon_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+  local hicolor_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+
   rm -f "${APP_DIR}/google-chrome-work.desktop" "${APP_DIR}/firefox-work.desktop" "${APP_DIR}/vscode-work.desktop" "${APP_DIR}/cursor-work.desktop" "${APP_DIR}/github-desktop-work.desktop"
   update-desktop-database "${APP_DIR}" >/dev/null 2>&1 || true
   echo "Removed desktop entries from ${APP_DIR}"
+
+  rm -f \
+    "${icon_dir}/com.google.ChromeDev.svg" \
+    "${icon_dir}/firefox-dev.svg" \
+    "${icon_dir}/code.svg" \
+    "${icon_dir}/cursor.svg" \
+    "${icon_dir}/github-desktop.svg"
+  gtk-update-icon-cache -f -t "${hicolor_dir}" >/dev/null 2>&1 || true
+  echo "Removed bundled app icons from ${icon_dir}"
 }
 
 remove_systemd_service() {
