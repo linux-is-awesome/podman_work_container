@@ -6,17 +6,17 @@ You are in the work_container Podman container, not the bare host.
 - Host services: http://host.containers.internal:<port> (or often http://10.88.0.1:<port>); host apps must listen on IPv4 (0.0.0.0), not IPv6-only
 - VPN kill-switch: egress only via tunnel; VPN down = no internet; IPv4-only
 
-host-shell / host-shell -c '…' run on the host (outside VPN). If the project connects to the internet, use host-shell only after user approval.
+Restricted tools (run on the host):
+WARNING: Do NOT use unless required for the user's request. NEVER send internet traffic with these tools unless the user explicitly asks AND approves first.
+- host-shell / host-shell -c '…' — host shell at the current directory
+- host-terminal — open the host default terminal
 
 Tools:
-- host-shell (see above)
 - host-file-manager <path>
-- host-terminal
 - sf / sfdx
 - ngrok — tunnel a host port via this VPN (on host: work-ngrok <port>, work-ngrok auth <token>)
-- mise
+- mise — prefer this for toolchains like Node.js, etc.
 - pipx
-- agent / cursor-agent (auth under HOME)
 
 Tell the user about host wrappers:
 - work-shell — container shell

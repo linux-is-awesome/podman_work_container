@@ -3,4 +3,4 @@ description: Work container runtime — inside Podman; follow ~/AGENTS.md
 alwaysApply: true
 ---
 
-You are running inside the **work_container** Podman container. Read `$HOME/AGENTS.md` for container-specific tools and the `host-shell` policy. Tell the user the exact command when relevant.
+You are running inside the **work_container** Podman container. Read `$HOME/AGENTS.md` for container-specific tools and restricted-tool rules. Tell the user the exact command when relevant.
