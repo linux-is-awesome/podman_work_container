@@ -16,12 +16,32 @@ The host does **not** need to be connected to VPN.
 The container uses a kill-switch policy: if VPN is not up, container egress stays blocked. IPv4 internet traffic must match IPsec policy; IPv6 is dropped (`ip6tables` + `disable_ipv6`). TCP to the Podman bridge gateway is only for host-side dev/Chrome, not general internet egress.
 Scripts use `sudo podman` (rootful mode), required for reliable IPsec behavior.
 
-## 1) Packages to install on host (Debian-based)
+## 1) Packages to install on host
+
+Rootful Podman (`sudo podman`) plus common container storage helpers. GUI apps use the host Wayland session (not X11/`xauth`).
+
+### Debian / Ubuntu
 
 ```bash
 sudo apt update
-sudo apt install -y podman uidmap slirp4netns fuse-overlayfs xauth
+sudo apt install -y podman uidmap slirp4netns fuse-overlayfs
 ```
+
+### Fedora
+
+```bash
+sudo dnf install -y podman fuse-overlayfs slirp4netns
+```
+
+(`shadow-utils` provides `newuidmap`/`newgidmap` and is usually already installed.)
+
+### Arch Linux
+
+```bash
+sudo pacman -S --needed podman fuse-overlayfs slirp4netns
+```
+
+Optional, for in-container `host-shell` / `host-terminal` SSH to the host: install and enable OpenSSH (`openssh-server` on Debian/Fedora, `openssh` on Arch), then `sudo systemctl enable --now sshd`. See the `host-shell` section below for keys.
 
 ## 2) Install/Update on host
 
