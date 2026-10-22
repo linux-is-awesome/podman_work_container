@@ -92,6 +92,45 @@ add_host_mounts() {
   fi
 }
 
+# Atomic hosts (Silverblue) keep system accounts in /usr/lib/{passwd,group} (nss altfiles)
+# while /etc/{passwd,group} are stubs. Ubuntu images only use nss "files", so merge both.
+prepare_host_passwd_group_mounts() {
+  local -n _mount_args="$1"
+  local host_home="$2"
+  local nss_dir="${host_home}/.containers/work_container/nss"
+  local passwd_out="${nss_dir}/passwd"
+  local group_out="${nss_dir}/group"
+
+  mkdir -p "${nss_dir}"
+
+  if [[ -f /usr/lib/passwd ]]; then
+    cat /etc/passwd /usr/lib/passwd | awk -F: '!seen[$1]++' > "${passwd_out}"
+  else
+    cp -f /etc/passwd "${passwd_out}"
+  fi
+  if [[ -f /usr/lib/group ]]; then
+    cat /etc/group /usr/lib/group | awk -F: '!seen[$1]++' > "${group_out}"
+  else
+    cp -f /etc/group "${group_out}"
+  fi
+  # Ensure Debian-style nogroup exists when only Fedora nobody is present (tinyproxy template).
+  if ! awk -F: '$1=="nogroup" {found=1} END{exit !found}' "${group_out}"; then
+    if awk -F: '$1=="nobody" {print $3; exit}' "${group_out}" | grep -q .; then
+      local nobody_gid
+      nobody_gid="$(awk -F: '$1=="nobody" {print $3; exit}' "${group_out}")"
+      echo "nogroup:x:${nobody_gid}:" >> "${group_out}"
+    else
+      echo "nogroup:x:65534:" >> "${group_out}"
+    fi
+  fi
+  if ! awk -F: '$1=="nobody" {found=1} END{exit !found}' "${passwd_out}"; then
+    echo "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin" >> "${passwd_out}"
+  fi
+
+  _mount_args+=("-v" "${passwd_out}:/etc/passwd:ro")
+  _mount_args+=("-v" "${group_out}:/etc/group:ro")
+}
+
 # Host /dev bind + privileged: same device nodes and hot-plug as the host (VPN unchanged).
 # /run/udev lets libudev (Chrome FIDO/HID, etc.) see add/remove after USB replug.
 add_host_usb_devices() {

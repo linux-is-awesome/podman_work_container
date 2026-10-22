@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 # Shared host/runtime status formatting helpers.
 
+# First existing DRM render node, or empty if none (e.g. some VMs).
+work_container_first_dri_render() {
+  local dri
+  for dri in /dev/dri/renderD*; do
+    if [[ -e "${dri}" ]]; then
+      echo "${dri}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 print_runtime_status_for_host() {
   local display_value="${1:-${DISPLAY:-}}"
   local wayland_display="${2:-}"
   local runtime_dir="${3:-}"
   local pulse_desc="${4:-}"
   local wayland_sock=""
+  local render_node=""
   local lines=()
 
   if [[ -n "${display_value}" ]] && [[ -d /tmp/.X11-unix ]]; then
@@ -26,10 +39,11 @@ print_runtime_status_for_host() {
     lines+=("  Wayland: missing (WAYLAND_DISPLAY or XDG_RUNTIME_DIR)")
   fi
 
-  if [[ -e /dev/dri/renderD128 ]]; then
-    lines+=("  GPU render node: OK (/dev/dri/renderD128)")
+  render_node="$(work_container_first_dri_render || true)"
+  if [[ -n "${render_node}" ]]; then
+    lines+=("  GPU render node: OK (${render_node})")
   else
-    lines+=("  GPU render node: missing (/dev/dri/renderD128)")
+    lines+=("  GPU render node: missing (software rendering)")
   fi
 
   if [[ -d /dev/snd ]]; then

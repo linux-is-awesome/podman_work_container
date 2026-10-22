@@ -23,33 +23,52 @@ HOST_GID="${WORK_CONTAINER_HOST_GID:-$(id -g)}"
 HOST_RUNTIME_DIR="${WORK_CONTAINER_HOST_RUNTIME_DIR:-/run/user/${HOST_UID}}"
 IMAGE_DIR="${WORK_CONTAINER_IMAGE_DIR:-${IMAGE_DIR}}"
 HOST_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+HOST_DISPLAY="${DISPLAY:-}"
+HOST_XAUTHORITY="${XAUTHORITY:-}"
 HOST_TIMEZONE="$(work_container_host_timezone)"
 WAIT_FOR_GUI="${WORK_CONTAINER_WAIT_FOR_GUI:-0}"
 WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-180}"
 WAIT_FOR_PAYLOAD="${WORK_CONTAINER_WAIT_FOR_PAYLOAD:-1}"
 WAIT_FOR_PAYLOAD_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_PAYLOAD_TIMEOUT:-180}"
 
+# GUI extras are optional: VPN/proxy must start even with no Wayland, GPU, or Pulse.
+# When WAIT_FOR_GUI=1, only wait for Wayland (apps need it); never block on GPU/audio.
 wait_for_gui_readiness() {
   local waited=0
   local step=2
   local wayland_sock="${HOST_RUNTIME_DIR}/wayland-0"
   local pulse_sock="${HOST_RUNTIME_DIR}/pulse/native"
+  local render_node=""
 
   if [[ "${WAIT_FOR_GUI}" != "1" ]]; then
     return
   fi
 
-  echo "Waiting for graphical session resources (Wayland/Pulse/GPU)..."
+  render_node="$(work_container_first_dri_render || true)"
+
+  echo "Waiting for Wayland session (GPU/Pulse optional)..."
   while (( waited < WAIT_FOR_GUI_TIMEOUT )); do
-    if [[ -S "${wayland_sock}" ]] && [[ -S "${pulse_sock}" ]] && [[ -e /dev/dri/renderD128 ]]; then
-      echo "Graphical session resources detected."
+    if [[ -S "${wayland_sock}" ]]; then
+      echo "Wayland ready (${wayland_sock})."
+      if [[ -S "${pulse_sock}" ]]; then
+        echo "  PulseAudio: OK (${pulse_sock})"
+      else
+        echo "  PulseAudio: missing (continuing without audio)"
+      fi
+      if [[ -n "${render_node}" ]]; then
+        echo "  GPU render node: OK (${render_node})"
+      else
+        echo "  GPU render node: missing (continuing; software rendering)"
+      fi
       return
     fi
     sleep "${step}"
     waited=$((waited + step))
   done
 
-  echo "Graphical resources not fully ready after ${WAIT_FOR_GUI_TIMEOUT}s; continuing startup."
+  echo "Wayland not ready after ${WAIT_FOR_GUI_TIMEOUT}s; continuing startup (headless OK)."
+  [[ -S "${pulse_sock}" ]] || echo "  PulseAudio: missing"
+  [[ -n "${render_node}" ]] || echo "  GPU render node: missing"
 }
 
 wait_for_payload() {
@@ -136,7 +155,23 @@ ensure_host_runtime_dir
 if [[ -z "${HOST_WAYLAND_DISPLAY}" ]] && [[ -S "${HOST_RUNTIME_DIR}/wayland-0" ]]; then
   HOST_WAYLAND_DISPLAY="wayland-0"
 fi
-HOST_STATUS="$(print_runtime_status_for_host "${DISPLAY:-}" "${HOST_WAYLAND_DISPLAY:-}" "${HOST_RUNTIME_DIR}" "unix:${HOST_RUNTIME_DIR}/pulse/native")"
+# Systemd has no session env; infer X11 like Wayland when the socket exists (XWayland).
+if [[ -z "${HOST_DISPLAY}" ]]; then
+  if [[ -S /tmp/.X11-unix/X0 ]]; then
+    HOST_DISPLAY=":0"
+  elif [[ -S /tmp/.X11-unix/X1 ]]; then
+    HOST_DISPLAY=":1"
+  fi
+fi
+if [[ -z "${HOST_XAUTHORITY}" ]]; then
+  for f in "${HOST_RUNTIME_DIR}"/.mutter-Xwaylandauth.*; do
+    if [[ -f "${f}" ]]; then
+      HOST_XAUTHORITY="${f}"
+      break
+    fi
+  done
+fi
+HOST_STATUS="$(print_runtime_status_for_host "${HOST_DISPLAY:-}" "${HOST_WAYLAND_DISPLAY:-}" "${HOST_RUNTIME_DIR}" "unix:${HOST_RUNTIME_DIR}/pulse/native")"
 
 DISPLAY_ARGS=()
 if [[ -d /tmp/.X11-unix ]]; then
@@ -148,10 +183,13 @@ fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
 fi
+[[ -n "${HOST_DISPLAY}" ]] && DISPLAY_ARGS+=("-e" "DISPLAY=${HOST_DISPLAY}")
+[[ -n "${HOST_XAUTHORITY}" ]] && DISPLAY_ARGS+=("-e" "XAUTHORITY=${HOST_XAUTHORITY}")
 podman_append_host_timezone_mounts DISPLAY_ARGS "${HOST_TIMEZONE}"
 add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOST_HOME}"
 add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOST_HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
+prepare_host_passwd_group_mounts DISPLAY_ARGS "${HOST_HOME}"
 
 APP_HOME="$(work_container_app_home_dir "${HOST_HOME}")"
 ensure_work_container_app_home "${HOST_HOME}" "${CONFIG_DIR}"
@@ -174,8 +212,6 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   --security-opt label=disable \
   --security-opt apparmor=unconfined \
   -v "${CONFIG_DIR}:/config:ro" \
-  -v "/etc/passwd:/etc/passwd:ro" \
-  -v "/etc/group:/etc/group:ro" \
   -v "${HOST_HOME}:${HOST_HOME}:rw" \
   "${APP_HOME_ENV[@]}" \
   -w "${HOST_HOME}" \

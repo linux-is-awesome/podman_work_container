@@ -7,7 +7,7 @@ Read this file before changing the project. Priority: current user instruction >
 - **No backward compatibility** unless the user asks in this session (no migration shims, dual paths, or old-name cleanup).
 - Keep project `src/host/{run,service-start,service-status}` aligned with installed `/usr/local/lib/work_container/src`.
 - Layout: `src/host/` (install/runtime, `app-runners/`, `wrappers/`, `desktop/`, `host-open/`), `src/container/` (image entrypoint; `COPY`’d), `src/dev/` (build/configure; project-only).
-- Config pattern: templates under `config/{vpn,proxy,shell,agent,xdg}/` → runtime under `/etc/...` in the container (same as VPN).
+- Config pattern: templates under `config/{vpn,proxy,shell,agent,xdg}/` → runtime under `/etc/...` in the container (same as VPN). Passwd/group: mount a merge of `/etc` + `/usr/lib` when altfiles exist (Atomic stubs); otherwise `/etc` as-is — keeps `nobody`/`nogroup` for tinyproxy.
 - Status = real runtime (socket/process/log), not configured-only. Logs: plain text, no custom bracket prefixes.
 - Say **image** (not archive). No new runtime deps unless requested.
 - Consistency changes: update code and this file in the same task.
@@ -33,6 +33,8 @@ Read this file before changing the project. Priority: current user instruction >
 - Desktop: `src/host/desktop/apps/` → `~/.local/share/applications`; Tela SVGs in `desktop/icons/` → `~/.local/share/icons/hicolor/scalable/apps`. Launch via `work-container-app` (no per-app host wrappers).
 - App-runners (host-owned, bind-mounted into container): must `exec` the real Electron/Chrome binary, not the mount path (`chrome` → `/opt/google/chrome/chrome`, `code` → `/usr/share/code/code`, `cursor` → `/usr/share/cursor/cursor`, github-desktop → `/usr/lib/...`). `BROWSER=/usr/local/bin/chrome-work-open`.
 - GUI session: Wayland + `DBUS_SESSION_BUS_ADDRESS` via `podman_append_gui_session_env`. Timezone: `TZ` + zoneinfo file mount (not symlink `/etc/localtime` alone).
+- `service-start`: systemd has no session env — infer `WAYLAND_DISPLAY` from `wayland-0`, and `DISPLAY`/`XAUTHORITY` from `/tmp/.X11-unix` + mutter auth when present (same “pass what exists” rule).
+- `WAIT_FOR_GUI=1` (systemd install): wait for Wayland only; GPU render node and Pulse are optional — start anyway (headless/VPN OK; apps use software GL if no `/dev/dri/renderD*`).
 - Devices: `--privileged`, `/dev:/dev:rslave`, `/run/udev:ro` when present, optional `pcscd` rundir.
 - Host-open (`src/host/host-open/`): `bin/*`, optional `apps/*.desktop`, `bind-paths.list`, `config/xdg/mimeapps.list` — mounted generically by `host-mounts`. No http(s) mapping (VPN Chrome). `host-shell` = SSH to `host.containers.internal` (passwd home keys, not APP_HOME).
 - Fonts: mount host fontconfig/font dirs. Do **not** mount host GTK `settings.ini`; generate via `host-gtk-settings` (gsettings, else copy) → `/etc/gtk-3.0|4.0/settings.ini`.
