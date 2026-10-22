@@ -20,25 +20,24 @@ Scripts use `sudo podman` (rootful mode), required for reliable IPsec behavior.
 
 Rootful Podman (`sudo podman`) plus common container storage helpers. GUI apps use the host Wayland session (not X11/`xauth`).
 
-### Debian / Ubuntu
+`./start` (menu or any command except `help`) detects Debian/Ubuntu, Fedora/RHEL-family, or Arch and checks for `podman`, `newuidmap`, `slirp4netns`, and `fuse-overlayfs`. If something is missing it asks to install; otherwise it exits and does not continue.
 
 ```bash
-sudo apt update
-sudo apt install -y podman uidmap slirp4netns fuse-overlayfs
+./start ensure-host-deps --yes    # install missing deps without prompt
+./start ensure-host-deps --check  # check only (exit 1 if missing)
 ```
 
-### Fedora
+Manual equivalents if you prefer:
 
 ```bash
-sudo dnf install -y podman fuse-overlayfs slirp4netns
-```
+# Debian / Ubuntu
+sudo apt update && sudo apt install -y podman uidmap slirp4netns fuse-overlayfs
 
-(`shadow-utils` provides `newuidmap`/`newgidmap` and is usually already installed.)
+# Fedora
+sudo dnf install -y podman fuse-overlayfs slirp4netns shadow-utils
 
-### Arch Linux
-
-```bash
-sudo pacman -S --needed podman fuse-overlayfs slirp4netns
+# Arch
+sudo pacman -S --needed podman fuse-overlayfs slirp4netns shadow
 ```
 
 Optional, for in-container `host-shell` / `host-terminal` SSH to the host: install and enable OpenSSH (`openssh-server` on Debian/Fedora, `openssh` on Arch), then `sudo systemctl enable --now sshd`. See the `host-shell` section below for keys.
