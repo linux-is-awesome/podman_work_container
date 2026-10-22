@@ -28,7 +28,7 @@ resolve_cmd_path() {
     build|clear-build-cache|configure-vpn)
       echo "${DEV_SCRIPTS_DIR}/${cmd}"
       ;;
-    install|uninstall|run|service-start|service-stop|service-status|exec-in|install-desktop)
+    install|uninstall|run|service-start|service-stop|service-status|exec-in|install-desktop|ensure-host-deps)
       echo "${HOST_SCRIPTS_DIR}/${cmd}"
       ;;
     *)
@@ -44,6 +44,11 @@ run_cmd() {
   local path
   path="$(resolve_cmd_path "${cmd}")"
   "${path}" "$@"
+}
+
+# Most start commands need host Podman tooling; refuse to continue until deps are OK.
+ensure_host_deps_or_exit() {
+  "${HOST_SCRIPTS_DIR}/ensure-host-deps" || exit $?
 }
 
 run_app() {
@@ -88,6 +93,7 @@ print_help() {
   echo "  ${C_GREEN}clear-build-cache${C_RESET}  (force next build to fetch fresh app versions)"
   echo "  ${C_GREEN}run${C_RESET} [version] [-- command...]"
   echo "  ${C_GREEN}install${C_RESET}"
+  echo "  ${C_GREEN}ensure-host-deps${C_RESET} [--yes|--check]  (podman etc. for Debian/Fedora/Arch)"
   echo "  ${C_GREEN}uninstall${C_RESET}"
   echo "  ${C_GREEN}configure-vpn${C_RESET}"
   echo "  ${C_GREEN}start-service${C_RESET} [version]  (alias for service-start)"
@@ -202,6 +208,7 @@ EOF
 }
 
 if [[ $# -eq 0 ]]; then
+  ensure_host_deps_or_exit
   interactive_menu
 fi
 
@@ -209,16 +216,24 @@ case "$1" in
   help|-h|--help)
     print_help
     ;;
+  ensure-host-deps)
+    # Explicit deps command — do not wrap again.
+    shift
+    run_cmd ensure-host-deps "$@"
+    ;;
   build|clear-build-cache|run|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
+    ensure_host_deps_or_exit
     cmd="$1"
     shift
     run_cmd "${cmd}" "$@"
     ;;
   start-service)
+    ensure_host_deps_or_exit
     shift
     run_cmd service-start "$@"
     ;;
   app)
+    ensure_host_deps_or_exit
     shift
     run_app "${1:-}" "${@:2}"
     ;;

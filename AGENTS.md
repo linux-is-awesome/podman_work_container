@@ -45,4 +45,4 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Touch often
 
-`start`, `src/host/{install,uninstall,service-*,run,exec-in,host-mounts,host-podman-exec,host-gtk-settings,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg}/`.
+`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-podman-exec,host-gtk-settings,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg}/`.

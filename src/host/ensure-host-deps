@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# Ensure host packages needed for work_container (Podman rootful + storage helpers).
+# Usage:
+#   ensure-host-deps           # check; if missing and tty, prompt to install
+#   ensure-host-deps --yes     # install missing without prompt
+#   ensure-host-deps --check   # check only (exit 1 if missing)
+set -euo pipefail
+
+MODE="auto"
+for arg in "$@"; do
+  case "${arg}" in
+    --yes|-y) MODE="yes" ;;
+    --check|--check-only) MODE="check" ;;
+    -h|--help)
+      echo "Usage: ensure-host-deps [--yes|--check]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: ${arg}" >&2
+      exit 1
+      ;;
+  esac
+done
+
+detect_family() {
+  local id="" like=""
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    id="${ID:-}"
+    like="${ID_LIKE:-}"
+  fi
+  case "${id}" in
+    debian|ubuntu|linuxmint|pop)
+      echo debian
+      return
+      ;;
+    fedora|rhel|centos|rocky|almalinux|nobara)
+      echo fedora
+      return
+      ;;
+    arch|archlinux|endeavouros|manjaro|garuda)
+      echo arch
+      return
+      ;;
+  esac
+  case " ${like} " in
+    *" debian "*|*" ubuntu "*) echo debian; return ;;
+    *" fedora "*|*" rhel "*|*" centos "*) echo fedora; return ;;
+    *" arch "*) echo arch; return ;;
+  esac
+  echo unknown
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+FAMILY="$(detect_family)"
+MISSING_PKGS=()
+MISSING_CMDS=()
+
+require_cmd_pkg() {
+  local cmd="$1" pkg="$2"
+  if need_cmd "${cmd}"; then
+    return 0
+  fi
+  MISSING_CMDS+=("${cmd}")
+  # de-dupe packages
+  local p
+  for p in "${MISSING_PKGS[@]+"${MISSING_PKGS[@]}"}"; do
+    [[ "${p}" == "${pkg}" ]] && return 0
+  done
+  MISSING_PKGS+=("${pkg}")
+}
+
+case "${FAMILY}" in
+  debian)
+    require_cmd_pkg podman podman
+    require_cmd_pkg newuidmap uidmap
+    require_cmd_pkg slirp4netns slirp4netns
+    require_cmd_pkg fuse-overlayfs fuse-overlayfs
+    ;;
+  fedora)
+    require_cmd_pkg podman podman
+    require_cmd_pkg newuidmap shadow-utils
+    require_cmd_pkg slirp4netns slirp4netns
+    require_cmd_pkg fuse-overlayfs fuse-overlayfs
+    ;;
+  arch)
+    require_cmd_pkg podman podman
+    require_cmd_pkg newuidmap shadow
+    require_cmd_pkg slirp4netns slirp4netns
+    require_cmd_pkg fuse-overlayfs fuse-overlayfs
+    ;;
+  *)
+    echo "Unsupported or unknown distro (need Debian/Ubuntu, Fedora/RHEL, or Arch)." >&2
+    echo "Install manually: podman, newuidmap (uidmap/shadow-utils/shadow), slirp4netns, fuse-overlayfs" >&2
+    exit 1
+    ;;
+esac
+
+if ! need_cmd systemctl; then
+  echo "systemctl is required (systemd host)." >&2
+  exit 1
+fi
+
+if [[ "${#MISSING_PKGS[@]}" -eq 0 ]]; then
+  echo "Host deps OK (${FAMILY}): podman, newuidmap, slirp4netns, fuse-overlayfs"
+  if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce 2>/dev/null || true)" == "Enforcing" ]]; then
+    echo "Note: SELinux is Enforcing; if rootful Podman hits denials, check audit logs / setsebool as needed."
+  fi
+  exit 0
+fi
+
+echo "Missing host commands: ${MISSING_CMDS[*]}"
+echo "Distro family: ${FAMILY}"
+echo "Packages to install: ${MISSING_PKGS[*]}"
+
+run_install() {
+  if ! need_cmd sudo; then
+    echo "sudo is required to install packages." >&2
+    exit 1
+  fi
+  case "${FAMILY}" in
+    debian)
+      sudo apt-get update -y
+      sudo apt-get install -y "${MISSING_PKGS[@]}"
+      ;;
+    fedora)
+      sudo dnf install -y "${MISSING_PKGS[@]}"
+      ;;
+    arch)
+      sudo pacman -S --needed --noconfirm "${MISSING_PKGS[@]}"
+      ;;
+  esac
+}
+
+case "${MODE}" in
+  check)
+    echo "Install with: ./start ensure-host-deps --yes"
+    exit 1
+    ;;
+  yes)
+    run_install
+    ;;
+  auto)
+    if [[ -t 0 ]] && [[ -t 1 ]]; then
+      read -r -p "Install missing packages now? [Y/n] " ans
+      ans="${ans:-Y}"
+      case "${ans}" in
+        Y|y|yes|YES) run_install ;;
+        *)
+          echo "Aborted. Install with: ./start ensure-host-deps --yes" >&2
+          exit 1
+          ;;
+      esac
+    else
+      echo "Non-interactive; refusing to install. Re-run with --yes:" >&2
+      echo "  ./start ensure-host-deps --yes" >&2
+      echo "  WORK_CONTAINER_INSTALL_DEPS=yes ./start install" >&2
+      exit 1
+    fi
+    ;;
+esac
+
+# Re-check
+FAIL=0
+for cmd in podman newuidmap slirp4netns fuse-overlayfs; do
+  if ! need_cmd "${cmd}"; then
+    echo "Still missing after install: ${cmd}" >&2
+    FAIL=1
+  fi
+done
+if [[ "${FAIL}" -ne 0 ]]; then
+  exit 1
+fi
+echo "Host deps installed (${FAMILY})."
