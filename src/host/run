@@ -105,6 +105,7 @@ podman_append_host_timezone_mounts DISPLAY_ARGS "${HOST_TIMEZONE}"
 add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOME}"
 add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
+prepare_host_passwd_group_mounts DISPLAY_ARGS "${HOME}"
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 
@@ -121,8 +122,6 @@ prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "$
   --security-opt label=disable \
   --security-opt apparmor=unconfined \
   -v "${CONFIG_DIR}:/config:ro" \
-  -v "/etc/passwd:/etc/passwd:ro" \
-  -v "/etc/group:/etc/group:ro" \
   -e "TZ=${HOST_TIMEZONE}" \
   -e "XDG_SESSION_TYPE=wayland" \
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \

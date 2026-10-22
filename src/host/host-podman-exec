@@ -100,19 +100,15 @@ podman_append_host_timezone_mounts() {
 work_container_host_groups_csv() {
   local groups_csv
   local gid
+  local dri
   groups_csv="$(id -G | tr ' ' ',')"
-  if [[ -e /dev/dri/renderD128 ]]; then
-    gid="$(stat -c '%g' /dev/dri/renderD128)"
+  for dri in /dev/dri/renderD* /dev/dri/card*; do
+    [[ -e "${dri}" ]] || continue
+    gid="$(stat -c '%g' "${dri}")"
     if [[ -n "${gid}" ]] && [[ ",${groups_csv}," != *",${gid},"* ]]; then
       groups_csv="${groups_csv},${gid}"
     fi
-  fi
-  if [[ -e /dev/dri/card0 ]]; then
-    gid="$(stat -c '%g' /dev/dri/card0)"
-    if [[ -n "${gid}" ]] && [[ ",${groups_csv}," != *",${gid},"* ]]; then
-      groups_csv="${groups_csv},${gid}"
-    fi
-  fi
+  done
   echo "${groups_csv}"
 }
 
