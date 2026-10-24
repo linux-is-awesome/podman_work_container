@@ -33,6 +33,7 @@ Read this file before changing the project. Priority: current user instruction >
 - Desktop: `src/host/desktop/apps/` → `~/.local/share/applications`; Tela SVGs in `desktop/icons/` → `~/.local/share/icons/hicolor/scalable/apps`. Launch via `work-container-app` (no per-app host wrappers).
 - App-runners (host-owned, bind-mounted into container): must `exec` the real Electron/Chrome binary, not the mount path (`chrome` → `/opt/google/chrome/chrome`, `code` → `/usr/share/code/code`, `cursor` → `/usr/share/cursor/cursor`, github-desktop → `/usr/lib/...`). `BROWSER=/usr/local/bin/chrome-work-open`.
 - GUI session: Wayland + `DBUS_SESSION_BUS_ADDRESS` via `podman_append_gui_session_env`. Timezone: `TZ` + zoneinfo file mount (not symlink `/etc/localtime` alone).
+- Chrome Wayland screen share: host portal + PipeWire sockets (via `XDG_RUNTIME_DIR`); image needs PipeWire **client** stack (`libpipewire-0.3-0`, `libpipewire-0.3-modules`, `pipewire` for `client.conf`) — no PipeWire server in the container.
 - `service-start`: systemd has no session env — infer `WAYLAND_DISPLAY` from `wayland-0`, and `DISPLAY`/`XAUTHORITY` from `/tmp/.X11-unix` + mutter auth when present (same “pass what exists” rule).
 - `WAIT_FOR_GUI=1` (systemd install): wait for Wayland only; GPU render node and Pulse are optional — start anyway (headless/VPN OK; apps use software GL if no `/dev/dri/renderD*`).
 - Devices: `--privileged`, `/dev:/dev:rslave`, `/run/udev:ro` when present, optional `pcscd` rundir.

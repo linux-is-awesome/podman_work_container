@@ -17,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     libcanberra-gtk3-module \
     libasound2 \
+    libpipewire-0.3-0 \
+    libpipewire-0.3-modules \
+    pipewire \
     libva2 \
     libva-drm2 \
     libva-wayland2 \
