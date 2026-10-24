@@ -5,8 +5,10 @@
 # home for keys, not APP_HOME).
 #
 # Usage:
-#   host-shell              # interactive host shell at $PWD
-#   host-shell -c 'cmd…'    # run a command on the host at $PWD (task-friendly)
+#   host-shell                 # interactive host shell at $PWD
+#   host-shell -c 'cmd…'       # run on the host at $PWD: wait, pipe logs/exit
+#                              # (systemd-run --user --pipe -p KillMode=process
+#                              # so spawn-and-return launchers keep children)
 set -eu
 
 HOST="${WORK_CONTAINER_SSH_HOST:-host.containers.internal}"
@@ -60,7 +62,10 @@ ensure_host_ssh_auth
 
 cwd=$(pwd)
 qcwd=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${cwd}")
-remote_prefix="cd ${qcwd} 2>/dev/null || cd \"\$HOME\""
+# Sourced on the host after SSH (installed next to host-mounts; not in the container).
+# Use `if` (not `&&`) so a missing file does not skip the shell/command.
+SESSION_ENV="/usr/local/lib/work_container/src/host-session-env"
+remote_prefix="cd ${qcwd} 2>/dev/null || cd \"\$HOME\"; if [ -f ${SESSION_ENV} ]; then . ${SESSION_ENV}; fi"
 
 if [ "${1:-}" = "-c" ]; then
   shift
@@ -71,7 +76,17 @@ if [ "${1:-}" = "-c" ]; then
   # Join remaining args (vscode may pass one string or split words).
   cmd=$*
   qcmd=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${cmd}")
-  exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix} && exec bash -lc ${qcmd}"
+  qcwd_run=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${cwd}")
+  # Same as host bash for the caller (wait + stdout/stderr + exit), but under a
+  # user unit with KillMode=process so gtk-launch / steps/launch children live on.
+  remote_run="systemd-run --user --quiet --collect --pipe -p KillMode=process --working-directory=${qcwd_run} bash -lc ${qcmd}"
+  exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix}; exec ${remote_run}"
 fi
 
-exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix} && exec \${SHELL:-bash} -i"
+if [ $# -gt 0 ]; then
+  echo "host-shell: unexpected argument: $1" >&2
+  echo "Usage: host-shell [-c 'cmd…']" >&2
+  exit 1
+fi
+
+exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix}; exec \${SHELL:-bash} -i"

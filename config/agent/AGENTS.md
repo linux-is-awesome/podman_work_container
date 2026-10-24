@@ -12,7 +12,7 @@ Rules:
 2. NEVER send internet / outbound network traffic through them unless the user has given a separate, explicit approval in this conversation for that specific call (or a clearly scoped set of calls).
 3. Asking whether something is possible is not approval. Answer only; for a host-network call, ask first and wait for a clear yes.
 4. Approval is one-shot for the stated action unless the user says otherwise. Do not reuse it for later callouts.
-- host-shell / host-shell -c '…'
+- host-shell / host-shell -c '…' (wait + logs/exit like host bash; KillMode=process keeps gtk-launch / steps/launch children)
 - host-terminal
 Before using these tools (especially with network), re-read Rules above.
 
