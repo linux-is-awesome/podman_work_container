@@ -37,7 +37,7 @@ Read this file before changing the project. Priority: current user instruction >
 - `service-start`: systemd has no session env — infer `WAYLAND_DISPLAY` from `wayland-0`, and `DISPLAY`/`XAUTHORITY` from `/tmp/.X11-unix` + mutter auth when present (same “pass what exists” rule).
 - `WAIT_FOR_GUI=1` (systemd install): wait for Wayland only; GPU render node and Pulse are optional — start anyway (headless/VPN OK; apps use software GL if no `/dev/dri/renderD*`).
 - Devices: `--privileged`, `/dev:/dev:rslave`, `/run/udev:ro` when present, optional `pcscd` rundir.
-- Host-open (`src/host/host-open/`): `bin/*`, optional `apps/*.desktop`, `bind-paths.list`, `config/xdg/mimeapps.list` — mounted generically by `host-mounts`. No http(s) mapping (VPN Chrome). `host-shell` = SSH to `host.containers.internal` (passwd home keys, not APP_HOME).
+- Host-open (`src/host/host-open/`): `bin/*` → PATH bridges into the container; optional `apps/*.desktop`, `bind-paths.list`, `config/xdg/mimeapps.list` — mounted generically by `host-mounts`. No http(s) mapping (VPN Chrome). `host-shell` = SSH to `host.containers.internal` (passwd home keys, not APP_HOME); after SSH sources installed `host-session-env` (peer of `host-mounts`, host-only) for Wayland/DBus/`XDG_*` so GUI/portals match a desktop terminal. `host-shell -c '…'` → `systemd-run --user --pipe -p KillMode=process` (wait + logs/exit like host bash; spawn-and-return launchers `gtk-launch` / `steps/launch` keep children).
 - Fonts: mount host fontconfig/font dirs. Do **not** mount host GTK `settings.ini`; generate via `host-gtk-settings` (gsettings, else copy) → `/etc/gtk-3.0|4.0/settings.ini`.
 
 ## Image / tools

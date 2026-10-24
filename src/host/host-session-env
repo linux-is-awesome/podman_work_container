@@ -1,0 +1,63 @@
+# shellcheck shell=sh
+# Host runtime helper (peer of host-mounts). Sourced on the host by host-shell
+# after SSH — not mounted into the container, not a PATH command. Whitelist GUI
+# session env so SSH mimics a desktop terminal (Wayland apps, xdg-desktop-portal).
+# Safe no-op when sockets/systemd user env are missing. Does not override vars
+# already set (except SSH tty → wayland/x11).
+
+uid=$(id -u)
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
+
+if [ -S "${XDG_RUNTIME_DIR}/bus" ]; then
+  export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+fi
+
+# Import whitelist from systemd user manager (graphical session), only if unset.
+if command -v systemctl >/dev/null 2>&1; then
+  _hs_env=$(systemctl --user show-environment 2>/dev/null || true)
+  if [ -n "${_hs_env}" ]; then
+    for _hs_key in \
+      WAYLAND_DISPLAY \
+      DISPLAY \
+      XDG_SESSION_TYPE \
+      XDG_CURRENT_DESKTOP \
+      XDG_SESSION_DESKTOP \
+      XDG_SESSION_CLASS
+    do
+      _hs_val=$(printf '%s\n' "${_hs_env}" | sed -n "s/^${_hs_key}=//p" | head -n1)
+      if [ -n "${_hs_val}" ]; then
+        eval "_hs_cur=\${${_hs_key}:-}"
+        if [ -z "${_hs_cur}" ]; then
+          # Values from show-environment are KEY=value without shell metacharacters.
+          export "${_hs_key}=${_hs_val}"
+        fi
+      fi
+    done
+  fi
+  unset _hs_env _hs_key _hs_val _hs_cur
+fi
+
+# Socket fallbacks when systemd did not provide them.
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -S "${XDG_RUNTIME_DIR}/wayland-0" ]; then
+  export WAYLAND_DISPLAY=wayland-0
+fi
+if [ -z "${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
+  export DISPLAY=:0
+elif [ -z "${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X1 ]; then
+  export DISPLAY=:1
+fi
+
+# SSH/pam often sets XDG_SESSION_TYPE=tty; that breaks portals. Prefer real display.
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  case "${XDG_SESSION_TYPE:-}" in
+    ''|tty|unspecified) export XDG_SESSION_TYPE=wayland ;;
+  esac
+elif [ -n "${DISPLAY:-}" ]; then
+  case "${XDG_SESSION_TYPE:-}" in
+    ''|tty|unspecified) export XDG_SESSION_TYPE=x11 ;;
+  esac
+fi
+
+if [ -z "${XDG_CURRENT_DESKTOP:-}" ] && [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  export XDG_CURRENT_DESKTOP=GNOME
+fi

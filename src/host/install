@@ -104,6 +104,7 @@ install_runtime_bundle() {
     host-mounts \
     host-podman-exec \
     host-gtk-settings \
+    host-session-env \
     image-utils \
     runtime-status
   do

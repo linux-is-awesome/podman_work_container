@@ -28,11 +28,12 @@ add_host_mounts() {
   fi
 
   # Host-open bridges (src/host/host-open/):
-  # - bin/* → /usr/local/bin/<name>
+  # - bin/* → /usr/local/bin/<name> (executables only)
   # - apps/*.desktop → /usr/local/share/applications/
   # - bind-paths.list → extra probe-path mounts (bin/<name> → listed paths)
   # - config/xdg/mimeapps.list → /etc/xdg/mimeapps.list
   # Extend: add bin + optional desktop/MIME and/or bind-paths.list lines.
+  # (host-session-env lives under src/host/ with host-mounts — not mounted here.)
   local host_open_dir="${script_dir}/host-open"
   local host_open_bin
   if [[ -d "${host_open_dir}/bin" ]]; then
