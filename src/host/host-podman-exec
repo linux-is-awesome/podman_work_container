@@ -97,6 +97,30 @@ podman_append_host_timezone_mounts() {
   fi
 }
 
+# Bind host home at its real path, and also at /home/<user> when that differs
+# (Silverblue/Atomic: /var/home/<user> — host has /home → /var/home; the container does not).
+podman_append_host_home_mounts() {
+  local -n _mount_args="$1"
+  local host_home="$2"
+  local host_uid="${3:-}"
+  local user_name=""
+  local fhs_home=""
+
+  [[ -n "${host_home}" && -d "${host_home}" ]] || return 0
+
+  _mount_args+=("-v" "${host_home}:${host_home}:rw")
+
+  if [[ -n "${host_uid}" ]]; then
+    user_name="$(getent passwd "${host_uid}" 2>/dev/null | cut -d: -f1 || true)"
+  fi
+  [[ -n "${user_name}" ]] || user_name="$(basename "${host_home}")"
+  fhs_home="/home/${user_name}"
+
+  if [[ "${host_home}" != "${fhs_home}" ]]; then
+    _mount_args+=("-v" "${host_home}:${fhs_home}:rw")
+  fi
+}
+
 work_container_host_groups_csv() {
   local groups_csv
   local gid
