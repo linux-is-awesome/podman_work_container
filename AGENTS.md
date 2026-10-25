@@ -17,7 +17,7 @@ Read this file before changing the project. Priority: current user instruction >
 - `./start` → `src/host/` or `src/dev/`. Container/service name: `work_container`.
 - Install flattens host runtime into `/usr/local/lib/work_container/src` (+ `config/`); wrappers → `/usr/local/bin`.
 - `resolve-paths`: project = `src/host/../../`; installed = `…/work_container` (sibling `config/`).
-- Container APP_HOME: `~/.containers/work_container/home` (`HOME`/`XDG_*`/`BROWSER`/`WORK_CONTAINER_HOST_HOME` set in `service-start`). Host home bind-mounted at the same absolute paths; service cwd = host home.
+- Container APP_HOME: `~/.containers/work_container/home` (`HOME`/`XDG_*`/`BROWSER`/`WORK_CONTAINER_HOST_HOME` set in `service-start`). Host home bind-mounted at its real path and, when that is not `/home/<user>` (e.g. Silverblue `/var/home/<user>`), also at `/home/<user>` so FHS paths work; service cwd = host home.
 - `exec-in` / `work-container-app` / `sf`: `--workdir "${PWD}"` (must exist in container). `work-shell`: same, else fall back to container `HOME`.
 - `config/agent/`: in-container `AGENTS.md` + Cursor rule; install seeds APP_HOME `~/AGENTS.md` and `~/.cursor/rules/work-container.mdc`.
 

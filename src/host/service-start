@@ -195,6 +195,8 @@ APP_HOME="$(work_container_app_home_dir "${HOST_HOME}")"
 ensure_work_container_app_home "${HOST_HOME}" "${CONFIG_DIR}"
 APP_HOME_ENV=()
 work_container_run_app_home_env APP_HOME_ENV "${APP_HOME}" "${HOST_HOME}"
+HOME_MOUNT_ARGS=()
+podman_append_host_home_mounts HOME_MOUNT_ARGS "${HOST_HOME}" "${HOST_UID}"
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 
@@ -212,7 +214,7 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   --security-opt label=disable \
   --security-opt apparmor=unconfined \
   -v "${CONFIG_DIR}:/config:ro" \
-  -v "${HOST_HOME}:${HOST_HOME}:rw" \
+  "${HOME_MOUNT_ARGS[@]}" \
   "${APP_HOME_ENV[@]}" \
   -w "${HOST_HOME}" \
   -e "XDG_RUNTIME_DIR=${HOST_RUNTIME_DIR}" \
