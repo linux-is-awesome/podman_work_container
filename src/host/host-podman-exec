@@ -42,11 +42,33 @@ ensure_work_container_shell_rc() {
 
   if [[ ! -f "${app_home}/.bashrc" ]]; then
     cp "${bashrc_src}" "${app_home}/.bashrc"
+    chown --reference="${app_home}" "${app_home}/.bashrc"
   fi
 
   if [[ -f "${profile_src}" ]] && [[ ! -f "${app_home}/.profile" ]]; then
     cp "${profile_src}" "${app_home}/.profile"
+    chown --reference="${app_home}" "${app_home}/.profile"
   fi
+}
+
+# Seed APP_HOME editor routing config from config/routing/ when missing.
+# service-start runs as root — chown to APP_HOME owner so the user can edit.
+ensure_work_container_editor_routes() {
+  local app_home="$1"
+  local config_dir="$2"
+  local routes_src="${config_dir}/routing/work-editor-routing.conf"
+  local routes_file="${app_home}/.config/work-editor-routing.conf"
+
+  if [[ ! -f "${routes_src}" ]]; then
+    echo "Missing shipped editor routing config: ${routes_src}" >&2
+    return 1
+  fi
+
+  [[ -f "${routes_file}" ]] && return 0
+  mkdir -p "${app_home}/.config"
+  chown --reference="${app_home}" "${app_home}/.config"
+  cp "${routes_src}" "${routes_file}"
+  chown --reference="${app_home}" "${routes_file}"
 }
 
 ensure_work_container_app_home() {
@@ -55,6 +77,7 @@ ensure_work_container_app_home() {
   app_home="$(work_container_app_home_dir "${1:-${HOME}}")"
   mkdir -p "${app_home}/.config" "${app_home}/.cache" "${app_home}/.local/share"
   ensure_work_container_shell_rc "${app_home}" "${config_dir}"
+  ensure_work_container_editor_routes "${app_home}" "${config_dir}"
 }
 
 # Host IANA timezone (systemd service-start often has no TZ in the environment).

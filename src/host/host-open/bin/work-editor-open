@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""GitHub Desktop (and similar) → Cursor or VS Code.
+
+Order:
+  1. Running IDE that already has this path (or a parent folder) open — longest match wins
+  2. Longest matching prefix in work-editor-routing.conf
+  3. VS Code
+
+Open workspaces come from each IDE's storage.json (backupWorkspaces / windowsState),
+not /proc cmdlines — Electron does not keep the folder path on the process argv.
+
+Config (container APP_HOME / XDG_CONFIG_HOME):
+  ~/.config/work-editor-routing.conf
+
+  Template: config/routing/work-editor-routing.conf
+
+Launches via /usr/bin/code and /usr/bin/cursor (app-runners with Wayland flags).
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import urllib.parse
+from pathlib import Path
+
+
+EDITORS = {
+    "cursor": {
+        "bin": Path("/usr/bin/cursor"),
+        "cmdline_markers": ("/usr/share/cursor/cursor", "/usr/bin/cursor"),
+        "app_config_dir": "Cursor",
+    },
+    "code": {
+        "bin": Path("/usr/bin/code"),
+        "cmdline_markers": ("/usr/share/code/code", "/usr/bin/code"),
+        "app_config_dir": "Code",
+    },
+}
+
+
+def host_home() -> Path:
+    raw = os.environ.get("WORK_CONTAINER_HOST_HOME") or os.environ.get("HOME") or "/"
+    return Path(raw).expanduser().resolve()
+
+
+def xdg_config_home() -> Path:
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    return Path(xdg) if xdg else (Path.home() / ".config")
+
+
+def config_path() -> Path:
+    return xdg_config_home() / "work-editor-routing.conf"
+
+
+def expand_route(raw: str) -> Path:
+    raw = raw.strip()
+    if raw == "~":
+        return host_home()
+    if raw.startswith("~/"):
+        return (host_home() / raw[2:]).resolve()
+    return Path(raw).expanduser().resolve()
+
+
+def load_routes() -> list[tuple[Path, str]]:
+    path = config_path()
+    routes: list[tuple[Path, str]] = []
+    if not path.is_file():
+        return routes
+
+    section: str | None = None
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            name = line[1:-1].strip().lower()
+            if name == "vscode":
+                name = "code"
+            section = name if name in EDITORS else None
+            continue
+        if section is None:
+            continue
+        try:
+            routes.append((expand_route(line.split()[0]), section))
+        except (OSError, IndexError):
+            continue
+
+    routes.sort(key=lambda item: len(str(item[0])), reverse=True)
+    return routes
+
+
+def resolve_target(arg: str) -> Path:
+    if arg.startswith("file:"):
+        parsed = urllib.parse.urlparse(arg)
+        arg = urllib.parse.unquote(parsed.path)
+    return Path(arg).expanduser().resolve()
+
+
+def path_covers(prefix: Path, target: Path) -> bool:
+    try:
+        target.relative_to(prefix)
+        return True
+    except ValueError:
+        return False
+
+
+def match_route(target: Path, routes: list[tuple[Path, str]]) -> str | None:
+    for prefix, editor in routes:
+        if path_covers(prefix, target):
+            return editor
+    return None
+
+
+def uri_to_path(uri: str) -> Path | None:
+    if not uri:
+        return None
+    if uri.startswith("file:"):
+        parsed = urllib.parse.urlparse(uri)
+        uri = urllib.parse.unquote(parsed.path)
+    if not uri.startswith("/"):
+        return None
+    try:
+        return Path(uri).resolve()
+    except OSError:
+        return None
+
+
+def editor_process_running(editor: str) -> bool:
+    markers = EDITORS[editor]["cmdline_markers"]
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return False
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if not raw:
+            continue
+        joined = raw.replace(b"\0", b"\n").decode("utf-8", "replace")
+        if any(marker in joined for marker in markers):
+            return True
+    return False
+
+
+def open_folders_from_storage(editor: str) -> list[Path]:
+    """Folders currently tracked as open by Cursor/VS Code hot-exit state."""
+    storage = (
+        xdg_config_home()
+        / EDITORS[editor]["app_config_dir"]
+        / "User"
+        / "globalStorage"
+        / "storage.json"
+    )
+    if not storage.is_file():
+        return []
+
+    try:
+        data = json.loads(storage.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    folders: list[Path] = []
+
+    def add(uri: str | None) -> None:
+        if not uri:
+            return
+        path = uri_to_path(uri)
+        if path is not None and path.is_dir():
+            folders.append(path)
+
+    backup = data.get("backupWorkspaces") or {}
+    for item in backup.get("folders") or []:
+        if isinstance(item, dict):
+            add(item.get("folderUri"))
+
+    windows_state = data.get("windowsState") or {}
+    last = windows_state.get("lastActiveWindow") or {}
+    if isinstance(last, dict):
+        add(last.get("folder"))
+    for window in windows_state.get("openedWindows") or []:
+        if isinstance(window, dict):
+            add(window.get("folder"))
+
+    # Deduplicate while preserving order
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for folder in folders:
+        if folder not in seen:
+            seen.add(folder)
+            unique.append(folder)
+    return unique
+
+
+def editor_from_running(target: Path) -> str | None:
+    best: tuple[int, str] | None = None
+    for editor in EDITORS:
+        if not editor_process_running(editor):
+            continue
+        for workspace in open_folders_from_storage(editor):
+            if not path_covers(workspace, target):
+                continue
+            score = len(str(workspace))
+            if best is None or score > best[0]:
+                best = (score, editor)
+    return best[1] if best else None
+
+
+def launch(editor: str, target: Path) -> None:
+    binary = EDITORS[editor]["bin"]
+    if not binary.is_file():
+        print(f"work-editor-open: missing binary for {editor}: {binary}", file=sys.stderr)
+        sys.exit(1)
+    os.execv(str(binary), [str(binary), str(target)])
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) < 2:
+        print("Usage: work-editor-open <path-or-file-uri>...", file=sys.stderr)
+        return 2
+    target_arg = None
+    for arg in argv[1:]:
+        if arg.startswith("-") and not arg.startswith("file:"):
+            continue
+        target_arg = arg
+        break
+    if target_arg is None:
+        print("work-editor-open: no path argument", file=sys.stderr)
+        return 2
+
+    try:
+        target = resolve_target(target_arg)
+    except OSError as exc:
+        print(f"work-editor-open: bad path: {exc}", file=sys.stderr)
+        return 1
+
+    editor = editor_from_running(target)
+    if editor is None:
+        editor = match_route(target, load_routes())
+    if editor is None:
+        editor = "code"
+
+    launch(editor, target)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

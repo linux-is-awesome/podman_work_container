@@ -284,6 +284,41 @@ In **that** project’s `.vscode/settings.json` (not user settings), so other pr
 
 Open the folder in Cursor/VS Code **inside the work container** (e.g. Cursor Work). New terminals and shell tasks then run on the host at the workspace path. Omit these settings in other projects to keep container `bash`.
 
+### GitHub Desktop → Cursor or VS Code (`work-editor-open`)
+
+GitHub Desktop has one global external editor. Use **Custom Editor** pointing at `work-editor-open` (host-open bin → `/usr/local/bin/work-editor-open` in the container — not a host wrapper like `work-shell`). Built-in “Visual Studio Code” is not enough for routing (Desktop calls fixed paths such as `/usr/share/code/bin/code`).
+
+**Decision order**
+
+1. Running Cursor/VS Code that already has this path (or a parent folder) open — from IDE `storage.json` + process alive; longest match wins  
+2. Longest matching prefix in the routes file  
+3. Otherwise VS Code
+
+**Routes file** (container APP_HOME; seeded from `config/routing/work-editor-routing.conf` if missing):
+
+Inside the container: `~/.config/work-editor-routing.conf`  
+(`HOME` / `XDG_CONFIG_HOME` → APP_HOME under `~/.containers/work_container/home` on the host disk — not the host user’s `~/.config`.)
+
+```text
+# Longest matching prefix wins. ~ = host home (WORK_CONTAINER_HOST_HOME).
+
+[code]
+~/Projects/Linux/foo
+
+[cursor]
+~/Projects/Linux
+```
+
+**Configure GitHub Desktop** (app running in the work container):
+
+1. **File → Options** (Linux) / **GitHub Desktop → Settings** (macOS) → **Integrations**
+2. **External Editor** → **Configure Custom Editor**
+3. **Application** / Choose: `/usr/local/bin/work-editor-open`
+4. **Arguments:** `%TARGET_PATH%`
+5. Save
+
+Then **Repository → Open in default editor** (or open a changed file) goes through the router. The router `exec`s `/usr/bin/code` or `/usr/bin/cursor` (existing app-runners).
+
 ## 5) Update VPN settings without rebuild
 
 Edit `config/vpn/vpn.env` and/or `config/vpn/swanctl.conf.template`, then restart container:

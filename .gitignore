@@ -2,3 +2,5 @@ config/vpn/vpn.env
 config/proxy/proxy.env
 containers/
 .cursor/
+**/__pycache__/
+*.py[cod]
