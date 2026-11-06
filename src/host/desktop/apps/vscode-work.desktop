@@ -10,3 +10,8 @@ Categories=Development;IDE;TextEditor;
 MimeType=application/x-code-workspace;inode/directory;text/plain;
 StartupNotify=true
 StartupWMClass=com.microsoft.VSCode
+Actions=new-empty-window;
+
+[Desktop Action new-empty-window]
+Name=New Empty Window
+Exec=__RUNNER_BIN__ vscode --new-window %F

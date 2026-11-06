@@ -10,3 +10,8 @@ Categories=Network;WebBrowser;
 MimeType=application/pdf;application/vnd.mozilla.xul+xml;application/xhtml+xml;text/html;text/xml;x-scheme-handler/http;x-scheme-handler/https;
 StartupNotify=true
 StartupWMClass=Firefox-work
+Actions=new-private-window;
+
+[Desktop Action new-private-window]
+Name=New Private Window
+Exec=__RUNNER_BIN__ firefox --private-window %U
