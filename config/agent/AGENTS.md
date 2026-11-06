@@ -6,6 +6,9 @@ You are in the work_container Podman container, not the bare host.
 - Host services: http://host.containers.internal:<port> (or often http://10.88.0.1:<port>); host apps must listen on IPv4 (0.0.0.0), not IPv6-only
 - VPN kill-switch: egress only via tunnel; VPN down = no internet; IPv4-only
 
+Sense-check:
+- Users may make unclear or poorly framed requests. If a change looks like bad design or does not fit this environment, say so and wait for explicit approval before implementing.
+
 Restricted tools (run on the host):
 Rules:
 1. Do not use these tools unless needed for the user's request.
@@ -22,11 +25,13 @@ Tools:
 - ngrok — tunnel a host port via this VPN (on host: work-ngrok <port>, work-ngrok auth <token>)
 - mise — prefer this for toolchains like Node.js, etc.
 - pipx
+- mise-export — inside the container: export mise tools for host-shell PATH
 
 Tell the user about host wrappers:
 - work-shell — container shell
 - sf / sfdx
 - work-ngrok <port>
 - work-proxy — start container if needed + stream tinyproxy logs
+- mise-export <name> (in container) → use that name in host-shell
 
 Host→VPN HTTP CONNECT proxy (after VPN up): http://127.0.0.1:3128 on host (port WORK_CONTAINER_NODE_PROXY_PORT in config/proxy/proxy.env). For host apps (e.g. Node): HTTP_PROXY=HTTPS_PROXY=http://127.0.0.1:3128 and NO_PROXY=localhost,127.0.0.1. Still subject to kill-switch; unavailable while VPN is down.

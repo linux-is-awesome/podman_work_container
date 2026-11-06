@@ -4,3 +4,5 @@ alwaysApply: true
 ---
 
 You are running inside the **work_container** Podman container. Read `$HOME/AGENTS.md` for container-specific tools and restricted-tool rules. Tell the user the exact command when relevant.
+
+If a user request looks like bad design or a poor fit for this environment, say so and wait for explicit approval before implementing.

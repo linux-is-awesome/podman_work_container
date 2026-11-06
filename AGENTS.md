@@ -2,6 +2,13 @@
 
 Read this file before changing the project. Priority: current user instruction > this file > defaults. If they conflict, follow the user and update this file when the decision should persist.
 
+## Sense-check
+
+- Users may make unclear, contradictory, or poorly framed requests. That is expected.
+- Before non-trivial implementation, judge whether the request makes sense for this repo.
+- If something is bad design, over-engineered, fragile, or conflicts with these instructions: say so clearly, explain why, and **do not implement** until the user explicitly approves a direction.
+- Answering a design question or asking whether something is possible is not approval to build.
+
 ## Consistency
 
 - **No backward compatibility** unless the user asks in this session (no migration shims, dual paths, or old-name cleanup).
@@ -37,7 +44,7 @@ Read this file before changing the project. Priority: current user instruction >
 - `service-start`: systemd has no session env — infer `WAYLAND_DISPLAY` from `wayland-0`, and `DISPLAY`/`XAUTHORITY` from `/tmp/.X11-unix` + mutter auth when present (same “pass what exists” rule).
 - `WAIT_FOR_GUI=1` (systemd install): wait for Wayland only; GPU render node and Pulse are optional — start anyway (headless/VPN OK; apps use software GL if no `/dev/dri/renderD*`).
 - Devices: `--privileged`, `/dev:/dev:rslave`, `/run/udev:ro` when present, optional `pcscd` rundir.
-- Host-open (`src/host/host-open/`): `bin/*` → PATH bridges into the container; optional `apps/*.desktop`, `bind-paths.list`, `config/xdg/mimeapps.list` — mounted generically by `host-mounts`. No http(s) mapping (VPN Chrome). `host-shell` = SSH to `host.containers.internal` (passwd home keys, not APP_HOME); after SSH sources installed `host-session-env` (peer of `host-mounts`, host-only) for Wayland/DBus/`XDG_*` so GUI/portals match a desktop terminal. `host-shell -c '…'` → `systemd-run --user --pipe -p KillMode=process` (wait + logs/exit like host bash; spawn-and-return launchers `gtk-launch` / `steps/launch` keep children). `work-editor-open` = GitHub Desktop **Custom Editor** router (running IDE → APP_HOME `~/.config/work-editor-routing.conf` → VS Code); template `config/routing/work-editor-routing.conf` seeded if missing; launches via `/usr/bin/code`|`cursor` runners.
+- Host-open (`src/host/host-open/`): `bin/*` → PATH bridges into the container; optional `apps/*.desktop`, `bind-paths.list`, `config/xdg/mimeapps.list` — mounted generically by `host-mounts`. No http(s) mapping (VPN Chrome). `host-shell` = SSH to `host.containers.internal` (passwd home keys, not APP_HOME); after SSH sources installed `host-session-env` (GUI/Wayland/DBus/`XDG_*` only). mise-export PATH is **not** in `host-session-env`: `host-toolchain-env` prepends APP_HOME `~/.local/share/host-toolchain/bin`; install inserts a marked hook in the host `~/.bashrc` above the interactive `return` (same area as other tool PATH). Native terminal and host-shell share that one file; `host-shell -c` uses `bash -lc` (this host’s `~/.profile` sources `~/.bashrc`). `mise-export <name>` (inside the container) registers shims → `host-toolchain/run`; `--remove` / `--list`. `host-shell -c '…'` → `systemd-run --user --pipe -p KillMode=process` + `bash -lc`. `work-editor-open` = GitHub Desktop **Custom Editor** router (running IDE → APP_HOME `~/.config/work-editor-routing.conf` → VS Code); template `config/routing/work-editor-routing.conf` seeded if missing; launches via `/usr/bin/code`|`cursor` runners.
 - Fonts: mount host fontconfig/font dirs. Do **not** mount host GTK `settings.ini`; generate via `host-gtk-settings` (gsettings, else copy) → `/etc/gtk-3.0|4.0/settings.ini`.
 
 ## Image / tools
@@ -48,4 +55,4 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Touch often
 
-`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-podman-exec,host-gtk-settings,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.
+`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.

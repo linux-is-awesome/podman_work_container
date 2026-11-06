@@ -105,6 +105,7 @@ install_runtime_bundle() {
     host-podman-exec \
     host-gtk-settings \
     host-session-env \
+    host-toolchain-env \
     image-utils \
     runtime-status
   do
@@ -116,6 +117,10 @@ install_runtime_bundle() {
   if [[ -d "${HOST_SCRIPTS_DIR}/host-open" ]]; then
     sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}/host-open"
     sudo cp -a "${HOST_SCRIPTS_DIR}/host-open/." "${RUNTIME_SCRIPTS_DIR}/host-open/"
+  fi
+  if [[ -d "${HOST_SCRIPTS_DIR}/host-toolchain" ]]; then
+    sudo mkdir -p "${RUNTIME_SCRIPTS_DIR}/host-toolchain"
+    sudo cp -a "${HOST_SCRIPTS_DIR}/host-toolchain/." "${RUNTIME_SCRIPTS_DIR}/host-toolchain/"
   fi
 
   sudo cp -a "${PROJECT_DIR}/config/." "${RUNTIME_BASE}/config/"
@@ -176,6 +181,55 @@ install_sudoers_rule() {
   echo "Installed sudoers rule for passwordless podman: ${SUDOERS_PATH}"
 }
 
+# Idempotent marked block in the host user's ~/.bashrc — same place as their
+# other tool PATH (nvm/java/…): above the interactive-only `return`, so
+# login shells (profile → bashrc) and native terminals both get it.
+# host-shell -c uses bash -lc; profile sources bashrc on this host.
+ensure_host_toolchain_bashrc_hook() {
+  local bashrc="${CURRENT_HOME}/.bashrc"
+  local begin="# work_container-mise-export begin"
+  local end="# work_container-mise-export end"
+  local block tmp
+  block="$(cat <<EOF
+${begin}
+# mise-export shims (see /usr/local/lib/work_container/src/host-toolchain-env)
+if [ -f /usr/local/lib/work_container/src/host-toolchain-env ]; then
+  . /usr/local/lib/work_container/src/host-toolchain-env
+fi
+${end}
+EOF
+)"
+
+  touch "${bashrc}"
+  tmp="$(mktemp)"
+  if grep -qxF "${begin}" "${bashrc}" 2>/dev/null; then
+    awk -v begin="${begin}" -v end="${end}" -v block="${block}" '
+      $0 == begin { print block; skip=1; next }
+      skip && $0 == end { skip=0; next }
+      skip { next }
+      { print }
+    ' "${bashrc}" > "${tmp}"
+  else
+    # Insert before the interactive guard (Debian/Ubuntu bashrc); else prepend.
+    awk -v block="${block}" '
+      inserted == 0 && ($0 ~ /^case \$- in/ || $0 ~ /If not running interactively/) {
+        print block
+        print ""
+        inserted=1
+      }
+      { print }
+      END {
+        if (inserted == 0) {
+          print ""
+          print block
+        }
+      }
+    ' "${bashrc}" > "${tmp}"
+  fi
+  mv "${tmp}" "${bashrc}"
+  echo "Ensured mise-export PATH hook in ${bashrc} (above interactive guard)"
+}
+
 restart_service() {
   if ! sudo systemctl restart "${SERVICE_NAME}"; then
     echo "Failed to restart ${SERVICE_NAME} after install." >&2
@@ -201,6 +255,7 @@ sync_home_container_image
 install_runtime_bundle
 install_host_wrappers
 install_agent_context
+ensure_host_toolchain_bashrc_hook
 WORK_CONTAINER_RUNNER_BIN="${SYSTEM_RUNNER_BIN}" "${HOST_SCRIPTS_DIR}/install-desktop"
 install_sudoers_rule
 install_systemd_service
@@ -215,5 +270,6 @@ echo "- sf/sfdx wrappers installed: ${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN}"
 echo "- shell wrapper installed: ${WORK_SHELL_BIN}"
 echo "- ngrok wrapper installed: ${WORK_NGROK_BIN}"
 echo "- proxy log wrapper installed: ${WORK_PROXY_BIN}"
+echo "- mise-export PATH hook in ${CURRENT_HOME}/.bashrc (above interactive guard)"
 echo "- Passwordless sudo for podman/systemctl-start/restart installed (${SUDOERS_PATH})"
 echo "- Service installed and restarted: ${SERVICE_NAME}"

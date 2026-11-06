@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Host-shell trampoline for mise-export shims: run tool inside work_container at $PWD.
+# Invoked as basename ($0) from APP_HOME ~/.local/share/host-toolchain/bin/<name>.
+set -euo pipefail
+
+# shellcheck source=/dev/null
+source /usr/local/lib/work_container/src/host-podman-exec
+
+SERVICE_NAME="work_container.service"
+
+TOOL="$(basename "$0")"
+if [[ "${TOOL}" == "run" ]]; then
+  if [[ $# -lt 1 ]]; then
+    echo "Usage: host-toolchain/run <tool> [args…]" >&2
+    exit 2
+  fi
+  TOOL="$1"
+  shift
+fi
+
+if [[ ! "${TOOL}" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+  echo "host-toolchain: invalid tool name: ${TOOL}" >&2
+  exit 2
+fi
+
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  sudo systemctl restart "${SERVICE_NAME}"
+fi
+
+for _ in $(seq 1 60); do
+  if sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+    break
+  fi
+  sleep 1
+done
+if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
+  echo "host-toolchain: work_container is not running" >&2
+  exit 1
+fi
+
+WORKDIR="${HOME}"
+if [[ -n "${PWD:-}" ]]; then
+  WORK_CONTAINER_EXEC_STDIO=probe
+  if work_container_exec_as_user -- test -d "${PWD}" >/dev/null 2>&1; then
+    WORKDIR="${PWD}"
+  fi
+  unset WORK_CONTAINER_EXEC_STDIO
+fi
+
+if [[ "${TOOL}" == "mise" ]]; then
+  work_container_exec_as_user --workdir "${WORKDIR}" -- mise "$@"
+else
+  work_container_exec_as_user --workdir "${WORKDIR}" -- \
+    bash -lc 'eval "$(mise activate bash)"; exec "$0" "$@"' "${TOOL}" "$@"
+fi

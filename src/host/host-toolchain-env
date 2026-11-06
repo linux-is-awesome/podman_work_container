@@ -1,0 +1,14 @@
+# shellcheck shell=sh
+# mise-export shims on PATH (APP_HOME). Install adds a marked hook near the top
+# of the host user's ~/.bashrc (with nvm/java/…, above the interactive return).
+# Login path on this setup: bash -lc → ~/.profile → ~/.bashrc. Safe no-op if
+# the shim dir is missing. GUI/session env stays in host-session-env.
+
+_hs_tc_shims="${HOME}/.containers/work_container/home/.local/share/host-toolchain/bin"
+if [ -d "${_hs_tc_shims}" ]; then
+  case ":${PATH}:" in
+    *":${_hs_tc_shims}:"*) ;;
+    *) PATH="${_hs_tc_shims}:${PATH}"; export PATH ;;
+  esac
+fi
+unset _hs_tc_shims

@@ -258,8 +258,21 @@ host-shell -c 'pwd'     # run one command on the host at the current directory
 - authorizes the host user’s SSH public key in `~/.ssh/authorized_keys` if needed (passwordless `ssh` to the host)
 - opens `ssh` to `host.containers.internal` as your user
 - `cd`s to the same path you had in the container (host home is mounted at the same absolute paths)
+- sources `host-session-env` for GUI/session env only (Wayland/DBus/`XDG_*`)
 
 Requirements: host `sshd` listening (reachable as `host.containers.internal`), and a host key such as `~/.ssh/id_ed25519` (create with `ssh-keygen -t ed25519` on the host if missing). After the first successful authorize, further `host-shell` calls should not ask for a password.
+
+#### Export mise tools to the host (`mise-export`)
+
+From a **container** shell (`work-shell` or an IDE terminal in the container), after installing tools with mise:
+
+```bash
+mise-export mise
+mise-export node
+mise-export npm
+```
+
+Install inserts a marked hook near the top of the **host** `~/.bashrc` (with your other tool PATH, above the interactive-only `return`) that sources `host-toolchain-env`. That is the single load path: native terminals read bashrc; `host-shell -c` uses `bash -lc` → `~/.profile` → `~/.bashrc`. Shims live under APP_HOME `~/.local/share/host-toolchain/bin`. Uninstall removes the bashrc hook.
 
 #### Use host shell as the default in VS Code / Cursor (one project only)
 

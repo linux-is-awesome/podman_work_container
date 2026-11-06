@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Register a mise-managed tool for host-shell PATH. Run inside the container
+# (e.g. work-shell). Creates APP_HOME shims used by host-session-env on the host.
+#
+#   mise-export <name>           # e.g. mise, node, npm
+#   mise-export --remove <name>
+#   mise-export --list
+set -euo pipefail
+
+RUN_BIN="/usr/local/lib/work_container/src/host-toolchain/run"
+SHIM_DIR="${HOME}/.local/share/host-toolchain/bin"
+
+usage() {
+  echo "Usage: mise-export <name>" >&2
+  echo "       mise-export --remove <name>" >&2
+  echo "       mise-export --list" >&2
+  echo "Run inside the container (e.g. work-shell)." >&2
+}
+
+valid_name() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]
+}
+
+list_shims() {
+  if [[ ! -d "${SHIM_DIR}" ]]; then
+    echo "(none)"
+    return 0
+  fi
+  local found=0 f
+  for f in "${SHIM_DIR}"/*; do
+    [[ -L "${f}" ]] || continue
+    basename "${f}"
+    found=1
+  done
+  if [[ "${found}" -eq 0 ]]; then
+    echo "(none)"
+  fi
+}
+
+remove_shim() {
+  local name="$1"
+  if [[ ! -e "${SHIM_DIR}/${name}" ]] && [[ ! -L "${SHIM_DIR}/${name}" ]]; then
+    echo "mise-export: not registered: ${name}" >&2
+    exit 1
+  fi
+  rm -f "${SHIM_DIR}/${name}"
+  echo "Removed host-shell export: ${name}"
+}
+
+add_shim() {
+  local name="$1"
+  if [[ "${name}" == "mise-export" || "${name}" == "run" ]]; then
+    echo "mise-export: reserved name: ${name}" >&2
+    exit 2
+  fi
+  if ! valid_name "${name}"; then
+    echo "mise-export: invalid tool name: ${name}" >&2
+    exit 2
+  fi
+  if [[ -z "${WORK_CONTAINER_HOST_HOME:-}" ]]; then
+    echo "mise-export: run inside the work container (e.g. work-shell), not on the host" >&2
+    exit 1
+  fi
+  if ! command -v mise >/dev/null 2>&1; then
+    echo "mise-export: mise not found on PATH" >&2
+    exit 1
+  fi
+
+  eval "$(mise activate bash)"
+  if ! command -v "${name}" >/dev/null 2>&1; then
+    echo "mise-export: '${name}' not found (mise install / mise use first)" >&2
+    exit 1
+  fi
+
+  mkdir -p "${SHIM_DIR}"
+  ln -sfn "${RUN_BIN}" "${SHIM_DIR}/${name}"
+  echo "Exported for host-shell: ${name}"
+  echo "Open a new host-shell (or hash -r) to pick it up."
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 2
+fi
+
+case "$1" in
+  --list|-l) list_shims ;;
+  --remove|-r)
+    [[ $# -eq 2 ]] || { usage; exit 2; }
+    valid_name "$2" || { echo "mise-export: invalid tool name: $2" >&2; exit 2; }
+    remove_shim "$2"
+    ;;
+  -h|--help) usage; exit 0 ;;
+  -*)
+    echo "mise-export: unknown option: $1" >&2
+    usage
+    exit 2
+    ;;
+  *)
+    [[ $# -eq 1 ]] || { usage; exit 2; }
+    add_shim "$1"
+    ;;
+esac

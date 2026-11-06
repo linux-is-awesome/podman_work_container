@@ -97,6 +97,26 @@ remove_runtime_bundle() {
   echo "Removed runtime bundle ${RUNTIME_BASE}"
 }
 
+remove_host_toolchain_bashrc_hook() {
+  local bashrc="${HOME}/.bashrc"
+  local begin="# work_container-mise-export begin"
+  local end="# work_container-mise-export end"
+  [[ -f "${bashrc}" ]] || return 0
+  if ! grep -qxF "${begin}" "${bashrc}" 2>/dev/null; then
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp)"
+  awk -v begin="${begin}" -v end="${end}" '
+    $0 == begin { skip=1; next }
+    skip && $0 == end { skip=0; next }
+    skip { next }
+    { print }
+  ' "${bashrc}" > "${tmp}"
+  mv "${tmp}" "${bashrc}"
+  echo "Removed mise-export PATH hook from ${bashrc}"
+}
+
 echo "Uninstalling work_container host integration..."
 remove_desktop_entries
 remove_systemd_service
@@ -109,6 +129,7 @@ remove_shell_wrapper
 remove_ngrok_wrapper
 remove_proxy_wrapper
 remove_runtime_bundle
+remove_host_toolchain_bashrc_hook
 
 echo
 echo "Uninstall complete."
@@ -123,4 +144,5 @@ echo "- shell wrapper removed (${WORK_SHELL_BIN})"
 echo "- ngrok wrapper removed (${WORK_NGROK_BIN})"
 echo "- proxy log wrapper removed (${WORK_PROXY_BIN})"
 echo "- Runtime bundle removed (${RUNTIME_BASE})"
+echo "- mise-export PATH hook removed from ~/.bashrc (if present)"
 echo "- Local app state preserved (${HOME}/.containers/work_container)"

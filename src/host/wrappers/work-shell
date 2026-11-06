@@ -22,6 +22,9 @@ if [[ -n "${PWD:-}" ]]; then
 fi
 
 EXEC_ARGS=(--workdir "${WORKDIR}")
+# Forward terminal type so ~/.bash_prompt (tput) gets colors; same as IDE terminals.
+[[ -n "${TERM:-}" ]] && EXEC_ARGS+=(-e "TERM=${TERM}")
+[[ -n "${COLORTERM:-}" ]] && EXEC_ARGS+=(-e "COLORTERM=${COLORTERM}")
 
 if [[ $# -eq 0 ]]; then
   work_container_exec_as_user "${EXEC_ARGS[@]}" -e PS1='work-shell# ' -- bash -i
