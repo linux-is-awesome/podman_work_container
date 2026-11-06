@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Fresh image: drop Podman build cache, then build with --no-cache
+# (Chrome/Code/Cursor/sf/etc. re-fetched). Use ./start build for fast cached rebuilds.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PODMAN_BIN=(sudo podman)
+
+echo "Pruning Podman build cache..."
+"${PODMAN_BIN[@]}" builder prune -af
+echo "Building image without cache..."
+exec "${SCRIPT_DIR}/build" --no-cache

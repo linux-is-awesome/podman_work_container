@@ -11,9 +11,19 @@ IMAGE_VERSION_TAG="${IMAGE_REPO}:${BUILD_VERSION}"
 IMAGE_LATEST_TAG="${IMAGE_REPO}:latest"
 IMAGE_PATH="${IMAGE_DIR}/work_container-${BUILD_VERSION}.oci"
 PODMAN_BIN=(sudo podman)
+BUILD_ARGS=()
+
+if [[ "${1:-}" == "--no-cache" ]]; then
+  BUILD_ARGS+=(--no-cache)
+  shift
+fi
+if [[ $# -gt 0 ]]; then
+  echo "Usage: build [--no-cache]" >&2
+  exit 1
+fi
 
 mkdir -p "${IMAGE_DIR}"
-"${PODMAN_BIN[@]}" build -t "${IMAGE_VERSION_TAG}" -f "${PROJECT_DIR}/Containerfile" "${PROJECT_DIR}"
+"${PODMAN_BIN[@]}" build "${BUILD_ARGS[@]}" -t "${IMAGE_VERSION_TAG}" -f "${PROJECT_DIR}/Containerfile" "${PROJECT_DIR}"
 "${PODMAN_BIN[@]}" tag "${IMAGE_VERSION_TAG}" "${IMAGE_LATEST_TAG}"
 "${PODMAN_BIN[@]}" save --format oci-archive -o "${IMAGE_PATH}" "${IMAGE_VERSION_TAG}"
 

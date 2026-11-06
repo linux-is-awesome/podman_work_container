@@ -51,10 +51,10 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Image / tools
 
-- Build layers cache forever without `--no-cache`; stale Chrome/Code/Cursor/`sf`/etc. until `./start clear-build-cache` then rebuild. Cursor CLI (`agent`) in image under `/opt/cursor-agent`, on PATH; no host wrapper — use `work-shell`. Prefer rebuild over `agent update` to image `/opt`.
+- `./start build` uses layer cache (fast Containerfile/config tests). `./start build-fresh` runs `podman builder prune -af` then `build --no-cache` (fresh Chrome/Code/Cursor/`sf`/…). Cursor CLI (`agent`) in image under `/opt/cursor-agent`, on PATH; no host wrapper — use `work-shell`. Prefer build-fresh over `agent update` to image `/opt`.
 - `mise`/`pipx` + agent CLIs (`rg`, `fd`, `jq`, …) in image; user runtimes persist in APP_HOME. No compilers / extra tool repos in image by default.
 - SF auth storm watch (`sfdx-auth-watch`): if ≥20 writes to one `~/.sfdx` org auth JSON in 30s, kill Code/Cursor extension hosts; 60s cooldown. Tunables `SFDX_AUTH_STORM_*`.
 
 ## Touch often
 
-`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-ufw,host-sshd,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.
+`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-ufw,host-sshd,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,build-fresh,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.

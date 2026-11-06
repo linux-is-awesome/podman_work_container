@@ -25,7 +25,7 @@ fi
 resolve_cmd_path() {
   local cmd="$1"
   case "${cmd}" in
-    build|clear-build-cache|configure-vpn)
+    build|build-fresh|configure-vpn)
       echo "${DEV_SCRIPTS_DIR}/${cmd}"
       ;;
     install|uninstall|run|service-start|service-stop|service-status|exec-in|install-desktop|ensure-host-deps)
@@ -89,8 +89,8 @@ print_help() {
   echo "  ./start app <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]"
   echo
   echo "${C_BOLD}Commands${C_RESET}"
-  echo "  ${C_GREEN}build${C_RESET}"
-  echo "  ${C_GREEN}clear-build-cache${C_RESET}  (force next build to fetch fresh app versions)"
+  echo "  ${C_GREEN}build${C_RESET}           (cached; fast for Containerfile/config tests)"
+  echo "  ${C_GREEN}build-fresh${C_RESET}    (prune build cache + --no-cache; fresh Chrome/Code/Cursor/sf/…)"
   echo "  ${C_GREEN}run${C_RESET} [version] [-- command...]"
   echo "  ${C_GREEN}install${C_RESET}"
   echo "  ${C_GREEN}ensure-host-deps${C_RESET} [--yes|--check]  (podman etc. for Debian/Fedora/Arch)"
@@ -131,26 +131,26 @@ interactive_menu() {
     draw_header
     cat <<EOF
 ${C_BOLD}${C_GREEN}Core${C_RESET}
-  [1] Build image
-  [2] Run container shell
-  [3] Install/update system integration
-  [4] Uninstall system integration
-  [5] Configure VPN
-  [c] Clear build cache (force fresh app versions on next build)
+  [1] Build image (cached, fast)
+  [2] Build fresh image (no cache; fresh apps)
+  [3] Run container shell
+  [4] Install/update system integration
+  [5] Uninstall system integration
+  [6] Configure VPN
 
 ${C_BOLD}${C_GREEN}Service${C_RESET}
-  [6] Start service
-  [7] Stop service
-  [8] Service status/logs
+  [7] Start service
+  [8] Stop service
+  [9] Service status/logs
 
 ${C_BOLD}${C_MAGENTA}Apps${C_RESET}
-  [9] Open Google Chrome
-  [10] Open Firefox
-  [11] Open VS Code
-  [12] Open Cursor
-  [13] Open GitHub Desktop
-  [14] Run Salesforce CLI (sf)
-  [15] Run custom command in service (exec-in)
+  [10] Open Google Chrome
+  [11] Open Firefox
+  [12] Open VS Code
+  [13] Open Cursor
+  [14] Open GitHub Desktop
+  [15] Run Salesforce CLI (sf)
+  [16] Run custom command in service (exec-in)
 
 ${C_BOLD}${C_CYAN}Other${C_RESET}
   [h] Help
@@ -160,27 +160,27 @@ EOF
     read -r -p "Choose option: " choice
     case "${choice}" in
       1) run_cmd build; pause ;;
-      2) run_cmd run; pause ;;
-      3)
+      2) run_cmd build-fresh; pause ;;
+      3) run_cmd run; pause ;;
+      4)
         run_cmd install
         pause
         ;;
-      4) run_cmd uninstall; pause ;;
-      5) run_cmd configure-vpn; pause ;;
-      c|C) run_cmd clear-build-cache; pause ;;
-      6)
+      5) run_cmd uninstall; pause ;;
+      6) run_cmd configure-vpn; pause ;;
+      7)
         read -r -p "Optional build version (blank=latest): " ver
         if [[ -n "${ver}" ]]; then run_cmd service-start "${ver}"; else run_cmd service-start; fi
         pause
         ;;
-      7) run_cmd service-stop; pause ;;
-      8) run_cmd service-status; pause ;;
-      9) run_app google-chrome; pause ;;
-      10) run_app firefox; pause ;;
-      11) run_app vscode; pause ;;
-      12) run_app cursor; pause ;;
-      13) run_app github-desktop; pause ;;
-      14)
+      8) run_cmd service-stop; pause ;;
+      9) run_cmd service-status; pause ;;
+      10) run_app google-chrome; pause ;;
+      11) run_app firefox; pause ;;
+      12) run_app vscode; pause ;;
+      13) run_app cursor; pause ;;
+      14) run_app github-desktop; pause ;;
+      15)
         read -r -p "sf args (blank=--version): " sf_args
         if [[ -n "${sf_args}" ]]; then
           # shellcheck disable=SC2206
@@ -191,7 +191,7 @@ EOF
         fi
         pause
         ;;
-      15)
+      16)
         read -r -p "Command to run inside service: " cmdline
         if [[ -n "${cmdline}" ]]; then
           # shellcheck disable=SC2206
@@ -221,7 +221,7 @@ case "$1" in
     shift
     run_cmd ensure-host-deps "$@"
     ;;
-  build|clear-build-cache|run|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
+  build|build-fresh|run|install|uninstall|configure-vpn|service-start|service-stop|service-status|exec-in)
     ensure_host_deps_or_exit
     cmd="$1"
     shift

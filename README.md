@@ -94,11 +94,19 @@ Proxy server template is in `config/proxy/tinyproxy.conf.template` (mounted from
 
 ## 4) Build image
 
+Fast rebuild (uses Podman layer cache — good for Containerfile/config tests):
+
 ```bash
 ./start build
 ```
 
-This always builds image `work_container:latest` and saves it to:
+Fresh rebuild (prune build cache + `--no-cache` — re-fetches Chrome/Code/Cursor/`sf`/etc.):
+
+```bash
+./start build-fresh
+```
+
+Both tag `work_container:latest` and save:
 
 `containers/work_container-YYYYMMDD-HHMMSS.oci`
 
@@ -395,10 +403,10 @@ How to check your Node app is using the proxy:
 
 ## 6) Update packages after image is already built
 
-Rebuild the image so changes stay reproducible:
+Use a full no-cache rebuild so package/app versions stay reproducible:
 
 ```bash
-./start build
+./start build-fresh
 ```
 
 ## 7) Portable single-file image
