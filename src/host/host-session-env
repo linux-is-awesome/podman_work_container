@@ -38,8 +38,17 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 # Socket fallbacks when systemd did not provide them.
-if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -S "${XDG_RUNTIME_DIR}/wayland-0" ]; then
-  export WAYLAND_DISPLAY=wayland-0
+# Hyprland uses wayland-1+ (skips wayland-0); GNOME typically wayland-0.
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  _hs_i=0
+  while [ "${_hs_i}" -le 32 ]; do
+    if [ -S "${XDG_RUNTIME_DIR}/wayland-${_hs_i}" ]; then
+      export WAYLAND_DISPLAY="wayland-${_hs_i}"
+      break
+    fi
+    _hs_i=$((_hs_i + 1))
+  done
+  unset _hs_i
 fi
 if [ -z "${DISPLAY:-}" ] && [ -S /tmp/.X11-unix/X0 ]; then
   export DISPLAY=:0

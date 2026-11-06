@@ -27,16 +27,18 @@ HOST_DISPLAY="${DISPLAY:-}"
 HOST_XAUTHORITY="${XAUTHORITY:-}"
 HOST_TIMEZONE="$(work_container_host_timezone)"
 WAIT_FOR_GUI="${WORK_CONTAINER_WAIT_FOR_GUI:-0}"
-WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-180}"
+WAIT_FOR_GUI_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_GUI_TIMEOUT:-30}"
 WAIT_FOR_PAYLOAD="${WORK_CONTAINER_WAIT_FOR_PAYLOAD:-1}"
 WAIT_FOR_PAYLOAD_TIMEOUT="${WORK_CONTAINER_WAIT_FOR_PAYLOAD_TIMEOUT:-180}"
 
 # GUI extras are optional: VPN/proxy must start even with no Wayland, GPU, or Pulse.
 # When WAIT_FOR_GUI=1, only wait for Wayland (apps need it); never block on GPU/audio.
+# Accept any wayland-N (Hyprland uses wayland-1+; GNOME typically wayland-0).
 wait_for_gui_readiness() {
   local waited=0
-  local step=2
-  local wayland_sock="${HOST_RUNTIME_DIR}/wayland-0"
+  local step=1
+  local wayland_display=""
+  local wayland_sock=""
   local pulse_sock="${HOST_RUNTIME_DIR}/pulse/native"
   local render_node=""
 
@@ -48,7 +50,10 @@ wait_for_gui_readiness() {
 
   echo "Waiting for Wayland session (GPU/Pulse optional)..."
   while (( waited < WAIT_FOR_GUI_TIMEOUT )); do
-    if [[ -S "${wayland_sock}" ]]; then
+    wayland_display="$(work_container_find_wayland_display "${HOST_RUNTIME_DIR}" || true)"
+    if [[ -n "${wayland_display}" ]]; then
+      wayland_sock="${HOST_RUNTIME_DIR}/${wayland_display}"
+      HOST_WAYLAND_DISPLAY="${wayland_display}"
       echo "Wayland ready (${wayland_sock})."
       if [[ -S "${pulse_sock}" ]]; then
         echo "  PulseAudio: OK (${pulse_sock})"
@@ -152,8 +157,12 @@ echo "Loading image from ${IMAGE_PATH}..."
 
 wait_for_gui_readiness
 ensure_host_runtime_dir
-if [[ -z "${HOST_WAYLAND_DISPLAY}" ]] && [[ -S "${HOST_RUNTIME_DIR}/wayland-0" ]]; then
-  HOST_WAYLAND_DISPLAY="wayland-0"
+if [[ -z "${HOST_WAYLAND_DISPLAY}" ]]; then
+  HOST_WAYLAND_DISPLAY="$(work_container_find_wayland_display "${HOST_RUNTIME_DIR}" || true)"
+fi
+if [[ -n "${HOST_WAYLAND_DISPLAY}" ]] && [[ ! -S "${HOST_RUNTIME_DIR}/${HOST_WAYLAND_DISPLAY}" ]]; then
+  # Stale WAYLAND_DISPLAY from env; pick a live socket instead.
+  HOST_WAYLAND_DISPLAY="$(work_container_find_wayland_display "${HOST_RUNTIME_DIR}" || true)"
 fi
 # Systemd has no session env; infer X11 like Wayland when the socket exists (XWayland).
 if [[ -z "${HOST_DISPLAY}" ]]; then

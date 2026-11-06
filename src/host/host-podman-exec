@@ -159,6 +159,22 @@ work_container_host_groups_csv() {
   echo "${groups_csv}"
 }
 
+# Basename of the first wayland-* socket in a runtime dir (wayland-0, wayland-1, …).
+# Hyprland intentionally skips wayland-0 and uses wayland-1+; GNOME typically uses wayland-0.
+# Prints e.g. wayland-1; returns 1 if none.
+work_container_find_wayland_display() {
+  local runtime_dir="${1:-}"
+  local i
+  [[ -n "${runtime_dir}" && -d "${runtime_dir}" ]] || return 1
+  for i in $(seq 0 32); do
+    if [[ -S "${runtime_dir}/wayland-${i}" ]]; then
+      echo "wayland-${i}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Host GUI session vars for app launches (DISPLAY, Wayland, audio, VA-API).
 podman_append_gui_session_env() {
   local -n _env_args="$1"
