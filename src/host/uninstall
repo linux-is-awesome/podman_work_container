@@ -117,6 +117,22 @@ remove_host_toolchain_bashrc_hook() {
   echo "Removed mise-export PATH hook from ${bashrc}"
 }
 
+remove_ufw_podman_rules() {
+  local host_ufw="${RUNTIME_BASE}/src/host-ufw"
+  local local_ufw
+  local_ufw="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/host-ufw"
+  if [[ -f "${host_ufw}" ]]; then
+    # shellcheck source=/dev/null
+    source "${host_ufw}"
+  elif [[ -f "${local_ufw}" ]]; then
+    # shellcheck source=/dev/null
+    source "${local_ufw}"
+  else
+    return 0
+  fi
+  work_container_remove_ufw_podman || true
+}
+
 echo "Uninstalling work_container host integration..."
 remove_desktop_entries
 remove_systemd_service
@@ -128,6 +144,7 @@ remove_cli_wrappers
 remove_shell_wrapper
 remove_ngrok_wrapper
 remove_proxy_wrapper
+remove_ufw_podman_rules
 remove_runtime_bundle
 remove_host_toolchain_bashrc_hook
 
@@ -143,6 +160,8 @@ echo "- sf/sfdx wrappers removed (${SF_WRAPPER_BIN}, ${SFDX_WRAPPER_BIN})"
 echo "- shell wrapper removed (${WORK_SHELL_BIN})"
 echo "- ngrok wrapper removed (${WORK_NGROK_BIN})"
 echo "- proxy log wrapper removed (${WORK_PROXY_BIN})"
+echo "- UFW podman0 INPUT rules removed (if UFW was active)"
 echo "- Runtime bundle removed (${RUNTIME_BASE})"
 echo "- mise-export PATH hook removed from ~/.bashrc (if present)"
+echo "- OpenSSH server left installed/enabled (shared host service)"
 echo "- Local app state preserved (${HOME}/.containers/work_container)"

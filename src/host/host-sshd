@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Ensure host OpenSSH daemon is installed enough to run and is enabled.
+# Used so container host-shell → host.containers.internal works without manual setup.
+# No-op when systemd/sshd are unavailable.
+
+work_container_sshd_run() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "host-sshd: need root to manage sshd (install openssh / enable service)." >&2
+    return 1
+  fi
+}
+
+work_container_sshd_unit() {
+  if systemctl list-unit-files sshd.service 2>/dev/null | grep -q '^sshd\.service'; then
+    echo sshd.service
+    return 0
+  fi
+  if systemctl list-unit-files ssh.service 2>/dev/null | grep -q '^ssh\.service'; then
+    echo ssh.service
+    return 0
+  fi
+  # Fallback when list-unit-files is filtered / unit not yet installed.
+  if [[ -f /usr/lib/systemd/system/sshd.service ]] || [[ -f /lib/systemd/system/sshd.service ]]; then
+    echo sshd.service
+    return 0
+  fi
+  if [[ -f /usr/lib/systemd/system/ssh.service ]] || [[ -f /lib/systemd/system/ssh.service ]]; then
+    echo ssh.service
+    return 0
+  fi
+  return 1
+}
+
+work_container_sshd_present() {
+  [[ -x /usr/sbin/sshd ]] || [[ -x /usr/bin/sshd ]] || command -v sshd >/dev/null 2>&1
+}
+
+# Enable and start sshd/ssh when the package is present. Idempotent.
+work_container_ensure_host_sshd() {
+  local unit=""
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! work_container_sshd_present; then
+    echo "host-sshd: openssh daemon not installed (sshd missing); host-shell will not work until OpenSSH server is installed." >&2
+    return 0
+  fi
+  if ! unit="$(work_container_sshd_unit)"; then
+    echo "host-sshd: sshd binary present but no sshd/ssh systemd unit found." >&2
+    return 0
+  fi
+
+  if systemctl is-active --quiet "${unit}" 2>/dev/null; then
+    return 0
+  fi
+
+  if work_container_sshd_run systemctl enable --now "${unit}"; then
+    echo "host-sshd: enabled and started ${unit}."
+  else
+    echo "host-sshd: failed to enable ${unit}; host-shell needs a running OpenSSH server." >&2
+    return 1
+  fi
+}

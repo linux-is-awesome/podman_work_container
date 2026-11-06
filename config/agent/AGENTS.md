@@ -4,6 +4,7 @@ You are in the work_container Podman container, not the bare host.
 - Host home is bind-mounted at the same absolute paths
 - localhost is the container
 - Host services: http://host.containers.internal:<port> (or often http://10.88.0.1:<port>); host apps must listen on IPv4 (0.0.0.0), not IPv6-only
+- Host UFW (Omarchy): install/service-start allows INPUT on podman0; without that, host.containers.internal times out
 - VPN kill-switch: egress only via tunnel; VPN down = no internet; IPv4-only
 
 Sense-check:

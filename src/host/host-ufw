@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# UFW + rootful Podman (Omarchy and similar: DEFAULT_INPUT/FORWARD DROP).
+#
+# - FORWARD: DEFAULT_FORWARD_POLICY=ACCEPT so bridge DNS/IKE can forward.
+#   after.rules ufw-user-forward hooks alone do not fix [UFW BLOCK] IN=podman0.
+# - INPUT: allow traffic arriving on podman0 so container → host.containers.internal
+#   (host-shell SSH, ngrok backend, host dev servers) is not dropped.
+# No-op if UFW absent/disabled.
+
+WORK_CONTAINER_UFW_PODMAN_COMMENT="work_container-host-bridge"
+
+work_container_ufw_is_enabled() {
+  if [[ -r /etc/ufw/ufw.conf ]] && grep -Eq '^ENABLED=yes$' /etc/ufw/ufw.conf; then
+    return 0
+  fi
+  if command -v ufw >/dev/null 2>&1; then
+    ufw status 2>/dev/null | grep -qi '^Status:[[:space:]]*active' && return 0
+  fi
+  return 1
+}
+
+work_container_ufw_run() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "UFW is active but cannot update host firewall (need root)." >&2
+    return 1
+  fi
+}
+
+work_container_ufw_has_podman_input_rule() {
+  local status_out=""
+  # Prefer file check (no sudo) so service-start/run stay quiet once configured.
+  if [[ -r /etc/ufw/user.rules ]] && grep -qE -- '-i podman0 |'"${WORK_CONTAINER_UFW_PODMAN_COMMENT}" /etc/ufw/user.rules; then
+    return 0
+  fi
+  status_out="$(work_container_ufw_run ufw status 2>/dev/null || true)"
+  if printf '%s\n' "${status_out}" | grep -Fq "${WORK_CONTAINER_UFW_PODMAN_COMMENT}"; then
+    return 0
+  fi
+  if printf '%s\n' "${status_out}" | grep -qiE 'ALLOW[[:space:]]+IN[[:space:]]+on[[:space:]]+podman'; then
+    return 0
+  fi
+  return 1
+}
+
+# Idempotent host UFW setup for work_container. Safe to call from service-start/run.
+work_container_ensure_ufw_podman() {
+  local need_reload=0
+
+  if ! work_container_ufw_is_enabled; then
+    return 0
+  fi
+
+  if [[ -f /etc/default/ufw ]] && ! grep -Eq '^DEFAULT_FORWARD_POLICY="?ACCEPT"?' /etc/default/ufw; then
+    work_container_ufw_run sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
+    echo "UFW: set DEFAULT_FORWARD_POLICY=ACCEPT (Podman bridge forward)."
+    need_reload=1
+  fi
+
+  if ! work_container_ufw_has_podman_input_rule && command -v ufw >/dev/null 2>&1; then
+    work_container_ufw_run ufw allow in on podman0 comment "${WORK_CONTAINER_UFW_PODMAN_COMMENT}"
+    echo "UFW: allowed INPUT on podman0 (${WORK_CONTAINER_UFW_PODMAN_COMMENT})."
+    need_reload=1
+  fi
+
+  if [[ "${need_reload}" -eq 1 ]] && command -v ufw >/dev/null 2>&1; then
+    work_container_ufw_run ufw reload >/dev/null
+  fi
+}
+
+work_container_remove_ufw_podman() {
+  local status_out="" num
+
+  if ! work_container_ufw_is_enabled || ! command -v ufw >/dev/null 2>&1; then
+    return 0
+  fi
+
+  work_container_ufw_run ufw --force delete allow in on podman0 >/dev/null 2>&1 || true
+
+  # Clear any remaining numbered rules tied to our comment / podman0 INPUT.
+  while true; do
+    status_out="$(work_container_ufw_run ufw status numbered 2>/dev/null || true)"
+    num="$(printf '%s\n' "${status_out}" | grep -iE "podman0|${WORK_CONTAINER_UFW_PODMAN_COMMENT}" | head -n1 | sed -n 's/^[[:space:]]*\[[[:space:]]*\([0-9]\+\)\].*/\1/p')"
+    [[ -n "${num}" ]] || break
+    work_container_ufw_run ufw --force delete "${num}" >/dev/null 2>&1 || break
+  done
+
+  echo "UFW: removed work_container podman0 INPUT rules (if any)."
+}

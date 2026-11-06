@@ -9,6 +9,8 @@ source "${SCRIPT_DIR}/image-utils"
 source "${SCRIPT_DIR}/host-mounts"
 source "${SCRIPT_DIR}/host-podman-exec"
 source "${SCRIPT_DIR}/host-gtk-settings"
+source "${SCRIPT_DIR}/host-ufw"
+source "${SCRIPT_DIR}/host-sshd"
 source "${SCRIPT_DIR}/runtime-status"
 
 IMAGE_NAME_PREFIX="work_container"
@@ -206,6 +208,9 @@ APP_HOME_ENV=()
 work_container_run_app_home_env APP_HOME_ENV "${APP_HOME}" "${HOST_HOME}"
 HOME_MOUNT_ARGS=()
 podman_append_host_home_mounts HOME_MOUNT_ARGS "${HOST_HOME}" "${HOST_UID}"
+
+work_container_ensure_ufw_podman
+work_container_ensure_host_sshd || true
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 

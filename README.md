@@ -40,7 +40,7 @@ sudo dnf install -y podman fuse-overlayfs slirp4netns shadow-utils
 sudo pacman -S --needed podman fuse-overlayfs slirp4netns shadow
 ```
 
-Optional, for in-container `host-shell` / `host-terminal` SSH to the host: install and enable OpenSSH (`openssh-server` on Debian/Fedora, `openssh` on Arch), then `sudo systemctl enable --now sshd`. See the `host-shell` section below for keys.
+`host-shell` / `host-terminal` need OpenSSH on the host. `./start ensure-host-deps` / `./start install` install the server package (`openssh-server` or `openssh`) and enable `sshd`/`ssh`. On hosts with UFW (e.g. Omarchy), install/service-start also allows INPUT on `podman0` so the container can reach `host.containers.internal` without manual `ufw` rules. See the `host-shell` section below.
 
 ## 2) Install/Update on host
 
@@ -255,12 +255,13 @@ host-shell -c 'pwd'     # run one command on the host at the current directory
 
 `host-shell` is bind-mounted into the container at `/usr/local/bin/host-shell`. It:
 
-- authorizes the host user’s SSH public key in `~/.ssh/authorized_keys` if needed (passwordless `ssh` to the host)
-- opens `ssh` to `host.containers.internal` as your user
+- generates `~/.ssh/id_ed25519` on the **host** home if no default key exists (empty passphrase)
+- authorizes that public key in `~/.ssh/authorized_keys` (passwordless `ssh` to the host)
+- opens `ssh` to `host.containers.internal` as your user (`StrictHostKeyChecking=accept-new`)
 - `cd`s to the same path you had in the container (host home is mounted at the same absolute paths)
 - sources `host-session-env` for GUI/session env only (Wayland/DBus/`XDG_*`)
 
-Requirements: host `sshd` listening (reachable as `host.containers.internal`), and a host key such as `~/.ssh/id_ed25519` (create with `ssh-keygen -t ed25519` on the host if missing). After the first successful authorize, further `host-shell` calls should not ask for a password.
+Requirements (normally satisfied by `./start install`): host `sshd` listening and reachable as `host.containers.internal`. With UFW active, `host-ufw` must allow INPUT on `podman0` (done automatically on service start).
 
 #### Export mise tools to the host (`mise-export`)
 

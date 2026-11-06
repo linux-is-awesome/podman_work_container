@@ -39,7 +39,7 @@ detect_family() {
       echo fedora
       return
       ;;
-    arch|archlinux|endeavouros|manjaro|garuda)
+    arch|archlinux|endeavouros|manjaro|garuda|omarchy|cachyos)
       echo arch
       return
       ;;
@@ -54,6 +54,10 @@ detect_family() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+need_sshd() {
+  [[ -x /usr/sbin/sshd ]] || [[ -x /usr/bin/sshd ]] || need_cmd sshd
 }
 
 FAMILY="$(detect_family)"
@@ -74,28 +78,44 @@ require_cmd_pkg() {
   MISSING_PKGS+=("${pkg}")
 }
 
+require_sshd_pkg() {
+  local pkg="$1"
+  if need_sshd; then
+    return 0
+  fi
+  MISSING_CMDS+=("sshd")
+  local p
+  for p in "${MISSING_PKGS[@]+"${MISSING_PKGS[@]}"}"; do
+    [[ "${p}" == "${pkg}" ]] && return 0
+  done
+  MISSING_PKGS+=("${pkg}")
+}
+
 case "${FAMILY}" in
   debian)
     require_cmd_pkg podman podman
     require_cmd_pkg newuidmap uidmap
     require_cmd_pkg slirp4netns slirp4netns
     require_cmd_pkg fuse-overlayfs fuse-overlayfs
+    require_sshd_pkg openssh-server
     ;;
   fedora)
     require_cmd_pkg podman podman
     require_cmd_pkg newuidmap shadow-utils
     require_cmd_pkg slirp4netns slirp4netns
     require_cmd_pkg fuse-overlayfs fuse-overlayfs
+    require_sshd_pkg openssh-server
     ;;
   arch)
     require_cmd_pkg podman podman
     require_cmd_pkg newuidmap shadow
     require_cmd_pkg slirp4netns slirp4netns
     require_cmd_pkg fuse-overlayfs fuse-overlayfs
+    require_sshd_pkg openssh
     ;;
   *)
     echo "Unsupported or unknown distro (need Debian/Ubuntu, Fedora/RHEL, or Arch)." >&2
-    echo "Install manually: podman, newuidmap (uidmap/shadow-utils/shadow), slirp4netns, fuse-overlayfs" >&2
+    echo "Install manually: podman, newuidmap (uidmap/shadow-utils/shadow), slirp4netns, fuse-overlayfs, openssh server" >&2
     exit 1
     ;;
 esac
@@ -105,11 +125,20 @@ if ! need_cmd systemctl; then
   exit 1
 fi
 
-if [[ "${#MISSING_PKGS[@]}" -eq 0 ]]; then
-  echo "Host deps OK (${FAMILY}): podman, newuidmap, slirp4netns, fuse-overlayfs"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=host-sshd
+source "${SCRIPT_DIR}/host-sshd"
+
+finish_ok() {
+  echo "Host deps OK (${FAMILY}): podman, newuidmap, slirp4netns, fuse-overlayfs, openssh"
   if command -v getenforce >/dev/null 2>&1 && [[ "$(getenforce 2>/dev/null || true)" == "Enforcing" ]]; then
     echo "Note: SELinux is Enforcing; if rootful Podman hits denials, check audit logs / setsebool as needed."
   fi
+  work_container_ensure_host_sshd || true
+}
+
+if [[ "${#MISSING_PKGS[@]}" -eq 0 ]]; then
+  finish_ok
   exit 0
 fi
 
@@ -172,7 +201,12 @@ for cmd in podman newuidmap slirp4netns fuse-overlayfs; do
     FAIL=1
   fi
 done
+if ! need_sshd; then
+  echo "Still missing after install: sshd (OpenSSH server)" >&2
+  FAIL=1
+fi
 if [[ "${FAIL}" -ne 0 ]]; then
   exit 1
 fi
 echo "Host deps installed (${FAMILY})."
+work_container_ensure_host_sshd || true

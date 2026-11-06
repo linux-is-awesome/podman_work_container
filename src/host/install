@@ -102,6 +102,8 @@ install_runtime_bundle() {
     service-stop \
     service-status \
     host-mounts \
+    host-ufw \
+    host-sshd \
     host-podman-exec \
     host-gtk-settings \
     host-session-env \

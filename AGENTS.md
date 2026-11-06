@@ -32,6 +32,8 @@ Read this file before changing the project. Priority: current user instruction >
 
 - Kill-switch (`entrypoint`): IPv4 default DROP; internet only via IPsec policy; IKE UDP to `VPN_SERVER_IP`; TCP to bridge GW for host-only backends; tinyproxy INPUT on `NODE_PROXY_PORT`; IPv6 all DROP; `TCPMSS --clamp-mss-to-pmtu` on IPsec OUTPUT. Tests: `tests/verify-killswitch-features.sh`.
 - IPv4-only (`gai.conf`, `disable_ipv6`). Bridge MTU 1400; charon MSS 1360; child `copy_df`. DNS from gateway via `vpn-updown` (`PLUTO_DNS4_*`) — no hardcoded resolvers.
+- Host UFW: when active (Omarchy), `host-ufw` sets `DEFAULT_FORWARD_POLICY=ACCEPT` (bridge DNS/IKE) and `ufw allow in on podman0` so container → `host.containers.internal` (SSH/host-shell, ngrok, host dev ports) is not dropped by `DEFAULT_INPUT_POLICY=DROP`. Uninstall removes the podman0 INPUT rule. Forward-only after.rules hooks do **not** fix `IN=podman0` INPUT drops.
+- Host SSH for `host-shell`: `ensure-host-deps` requires OpenSSH server and enables `sshd`/`ssh`; `host-shell` auto-generates `~/.ssh/id_ed25519` on the host home if missing and authorizes it. Do not open WAN SSH in UFW — only the podman0 INPUT allow.
 - Watchdog: retry while down; do not exit the container if VPN is initially down. DPD: `dpd_delay=10s`, child `dpd_action=restart`. “Public egress IP” log = connectivity check only.
 - Proxy: `config/proxy/`; render to `/etc/tinyproxy/tinyproxy.conf`. `service-start`/`service-status` report listen-socket reality.
 
@@ -55,4 +57,4 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Touch often
 
-`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.
+`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-ufw,host-sshd,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,clear-build-cache,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.

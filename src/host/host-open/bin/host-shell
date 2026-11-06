@@ -38,9 +38,15 @@ ensure_host_ssh_auth() {
   done
 
   if [ -z "${pubkey}" ]; then
-    echo "host-shell: no SSH public key in ${ssh_dir}" >&2
-    echo "Generate one on the host first, e.g.: ssh-keygen -t ed25519" >&2
-    return 1
+    # Host home is bind-mounted; generate a host key here so install needs no manual ssh-keygen.
+    if ! command -v ssh-keygen >/dev/null 2>&1; then
+      echo "host-shell: no SSH public key in ${ssh_dir} and ssh-keygen not available" >&2
+      echo "Install OpenSSH client/server on the host, or run: ssh-keygen -t ed25519" >&2
+      return 1
+    fi
+    ssh-keygen -t ed25519 -f "${ssh_dir}/id_ed25519" -N "" -C "$(id -un)@work_container-host"
+    pubkey="${ssh_dir}/id_ed25519.pub"
+    echo "host-shell: generated ${ssh_dir}/id_ed25519 (empty passphrase, container→host only)"
   fi
 
   key_line=$(tr -d '\r' < "${pubkey}" | head -n1)
@@ -66,6 +72,8 @@ qcwd=$(python3 -c 'import shlex,sys; print(shlex.quote(sys.argv[1]))' "${cwd}")
 # Use `if` (not `&&`) so a missing file does not skip the shell/command.
 SESSION_ENV="/usr/local/lib/work_container/src/host-session-env"
 remote_prefix="cd ${qcwd} 2>/dev/null || cd \"\$HOME\"; if [ -f ${SESSION_ENV} ]; then . ${SESSION_ENV}; fi"
+# accept-new: first container→host connect should not prompt for host key confirmation.
+SSH_BASE_OPTS="-o StrictHostKeyChecking=accept-new -o BatchMode=yes"
 
 if [ "${1:-}" = "-c" ]; then
   shift
@@ -80,7 +88,8 @@ if [ "${1:-}" = "-c" ]; then
   # Same as host bash for the caller (wait + stdout/stderr + exit), but under a
   # user unit with KillMode=process so gtk-launch / steps/launch children live on.
   remote_run="systemd-run --user --quiet --collect --pipe -p KillMode=process --working-directory=${qcwd_run} bash -lc ${qcmd}"
-  exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix}; exec ${remote_run}"
+  # shellcheck disable=SC2086
+  exec ssh -tt ${SSH_BASE_OPTS} "${REMOTE_USER}@${HOST}" "${remote_prefix}; exec ${remote_run}"
 fi
 
 if [ $# -gt 0 ]; then
@@ -89,4 +98,6 @@ if [ $# -gt 0 ]; then
   exit 1
 fi
 
-exec ssh -tt "${REMOTE_USER}@${HOST}" "${remote_prefix}; exec \${SHELL:-bash} -i"
+# Interactive: keep BatchMode off so a rare prompt can still surface.
+# shellcheck disable=SC2086
+exec ssh -tt -o StrictHostKeyChecking=accept-new "${REMOTE_USER}@${HOST}" "${remote_prefix}; exec \${SHELL:-bash} -i"

@@ -9,6 +9,8 @@ source "${SCRIPT_DIR}/image-utils"
 source "${SCRIPT_DIR}/host-mounts"
 source "${SCRIPT_DIR}/host-podman-exec"
 source "${SCRIPT_DIR}/host-gtk-settings"
+source "${SCRIPT_DIR}/host-ufw"
+source "${SCRIPT_DIR}/host-sshd"
 source "${SCRIPT_DIR}/runtime-status"
 
 IMAGE_NAME_PREFIX="work_container"
@@ -106,6 +108,9 @@ add_host_mounts DISPLAY_ARGS "${SCRIPT_DIR}" "${HOME}"
 add_host_usb_devices DISPLAY_ARGS
 prepare_host_gtk_settings_mounts DISPLAY_ARGS "${HOME}" "${HOST_RUNTIME_DIR}" "${HOST_UID}"
 prepare_host_passwd_group_mounts DISPLAY_ARGS "${HOME}"
+
+work_container_ensure_ufw_podman
+work_container_ensure_host_sshd || true
 
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 
