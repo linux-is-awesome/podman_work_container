@@ -188,8 +188,11 @@ DISPLAY_ARGS=()
 if [[ -d /tmp/.X11-unix ]]; then
   DISPLAY_ARGS+=("-v" "/tmp/.X11-unix:/tmp/.X11-unix:rw")
 fi
-if [[ -d "${HOST_RUNTIME_DIR}" ]]; then
-  DISPLAY_ARGS+=("-v" "${HOST_RUNTIME_DIR}:${HOST_RUNTIME_DIR}:rw")
+# Mount /run/user (parent), not /run/user/<uid>: logind deletes and recreates the
+# per-uid dir on logout/login; a bind of that inode goes stale while the parent mount
+# still sees the new session (Wayland, session bus, Pulse/PipeWire).
+if [[ -d /run/user ]]; then
+  DISPLAY_ARGS+=("-v" "/run/user:/run/user:rslave")
 fi
 if [[ -S /run/dbus/system_bus_socket ]]; then
   DISPLAY_ARGS+=("-v" "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket:rw")
