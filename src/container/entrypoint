@@ -33,6 +33,13 @@ TINYPROXY_BIN="$(command -v tinyproxy || true)"
 NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
 PROXY_STATUS_LINE="HTTP proxy: unavailable"
 
+# Host /usr/share/fonts (and user fonts) are bind-mounted over the image. On Atomic
+# hosts, composefs mtimes often leave a stale "0 fonts" cache as valid — force refresh.
+if command -v fc-cache >/dev/null 2>&1; then
+  echo "Refreshing fontconfig cache..."
+  fc-cache -f >/dev/null 2>&1 || true
+fi
+
 ensure_ip_rule_to_main() {
   local target_ip="$1"
   local pref="$2"
