@@ -39,7 +39,7 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## GUI / host bridges
 
-- Desktop: `src/host/desktop/apps/` → `~/.local/share/applications`; Tela SVGs in `desktop/icons/` → `~/.local/share/icons/hicolor/scalable/apps`. Launch via `work-container-app` (no per-app host wrappers).
+- Desktop: `src/host/desktop/apps/` → `~/.local/share/applications`; bundled app SVGs → `/usr/local/share/icons/hicolor/scalable/apps` (themeable `Icon=` names; not `~/.local` hicolor — a partial user hicolor shadows Adwaita’s fallback and breaks chevrons). Install copies system `hicolor/index.theme` into `/usr/local/share/icons/hicolor` when missing. Launch via `work-container-app` (no per-app host wrappers).
 - App-runners (host-owned, bind-mounted into container): must `exec` the real Electron/Chrome binary, not the mount path (`chrome` → `/opt/google/chrome/chrome`, `code` → `/usr/share/code/code`, `cursor` → `/usr/share/cursor/cursor`, github-desktop → `/usr/lib/...`). `BROWSER=/usr/local/bin/chrome-work-open`.
 - GUI session: Wayland + `DBUS_SESSION_BUS_ADDRESS` via `podman_append_gui_session_env` (re-resolves a live `wayland-*` on each app exec). Timezone: `TZ` + zoneinfo file mount (not symlink `/etc/localtime` alone).
 - Chrome Wayland screen share: host portal + PipeWire sockets (via `XDG_RUNTIME_DIR`); image needs PipeWire **client** stack (`libpipewire-0.3-0`, `libpipewire-0.3-modules`, `pipewire` for `client.conf`) — no PipeWire server in the container.

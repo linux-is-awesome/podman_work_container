@@ -7,7 +7,11 @@ DESKTOP_DIR="${PROJECT_DIR}/src/host/desktop"
 APPS_SRC_DIR="${DESKTOP_DIR}/apps"
 ICON_SRC_DIR="${DESKTOP_DIR}/icons"
 TARGET_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-ICON_DST_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps"
+# System-wide hicolor under /usr/local (not ~/.local): keeps Icon= themeable, and
+# avoids a partial user hicolor tree shadowing Adwaita's hicolor fallback (chevrons).
+ICON_HICOLOR_DIR="/usr/local/share/icons/hicolor"
+ICON_DST_DIR="${ICON_HICOLOR_DIR}/scalable/apps"
+SYSTEM_HICOLOR_INDEX="/usr/share/icons/hicolor/index.theme"
 RUNNER_BIN="${WORK_CONTAINER_RUNNER_BIN:-/usr/local/bin/work-container-app}"
 
 DESKTOP_FILES=(
@@ -18,7 +22,7 @@ DESKTOP_FILES=(
   github-desktop-work.desktop
 )
 
-# Icon basenames must match Icon= in the desktop files (Tela SVGs under src/host/desktop/icons/).
+# Icon basenames must match Icon= in the desktop files (theme lookup names).
 ICON_FILES=(
   com.google.ChromeDev.svg
   firefox-dev.svg
@@ -27,7 +31,13 @@ ICON_FILES=(
   github-desktop.svg
 )
 
-mkdir -p "${TARGET_DIR}" "${ICON_DST_DIR}"
+mkdir -p "${TARGET_DIR}"
+sudo mkdir -p "${ICON_DST_DIR}"
+
+if [[ -f "${SYSTEM_HICOLOR_INDEX}" ]] && [[ ! -f "${ICON_HICOLOR_DIR}/index.theme" ]]; then
+  sudo cp -f "${SYSTEM_HICOLOR_INDEX}" "${ICON_HICOLOR_DIR}/index.theme"
+  sudo chmod 644 "${ICON_HICOLOR_DIR}/index.theme"
+fi
 
 for icon in "${ICON_FILES[@]}"; do
   src="${ICON_SRC_DIR}/${icon}"
@@ -35,13 +45,16 @@ for icon in "${ICON_FILES[@]}"; do
     echo "Missing bundled icon: ${src}" >&2
     exit 1
   fi
-  cp -f "${src}" "${ICON_DST_DIR}/${icon}"
-  chmod 644 "${ICON_DST_DIR}/${icon}"
+  sudo cp -f "${src}" "${ICON_DST_DIR}/${icon}"
+  sudo chmod 644 "${ICON_DST_DIR}/${icon}"
   echo "Installed icon ${ICON_DST_DIR}/${icon}"
 done
 
-hicolor_dir="$(dirname "$(dirname "${ICON_DST_DIR}")")"
-gtk-update-icon-cache -f -t "${hicolor_dir}" >/dev/null 2>&1 || true
+if [[ -f "${ICON_HICOLOR_DIR}/index.theme" ]]; then
+  sudo gtk-update-icon-cache -f "${ICON_HICOLOR_DIR}" >/dev/null 2>&1 || true
+else
+  sudo gtk-update-icon-cache -f -t "${ICON_HICOLOR_DIR}" >/dev/null 2>&1 || true
+fi
 
 for file in "${DESKTOP_FILES[@]}"; do
   src="${APPS_SRC_DIR}/${file}"

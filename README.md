@@ -53,7 +53,7 @@ Run:
 This command will:
 - build image if no build archive exists yet
 - copy latest build archive to `~/.containers` (old versions there are removed)
-- install/update desktop entries in `~/.local/share/applications` and bundled Tela app icons into `~/.local/share/icons/hicolor/scalable/apps` (so launchers keep icons without the Tela theme)
+- install/update desktop entries in `~/.local/share/applications` and bundled app icons into `/usr/local/share/icons/hicolor/scalable/apps` (themeable `Icon=` names; avoids breaking Adwaita by polluting `~/.local` hicolor)
 - install `sf`/`sfdx` wrapper binaries in `/usr/local/bin` to use container CLI
 - install `work-shell` at `/usr/local/bin/work-shell` (run on the host for an interactive shell in the running container)
 - install `work-ngrok` at `/usr/local/bin/work-ngrok` (run ngrok inside container for a host port)
