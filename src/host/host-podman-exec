@@ -71,6 +71,28 @@ ensure_work_container_editor_routes() {
   chown --reference="${app_home}" "${routes_file}"
 }
 
+# Seed APP_HOME ~/.ssh/config when missing (AddKeysToAgent for host-agent unlock).
+ensure_work_container_ssh_config() {
+  local app_home="$1"
+  local config_dir="$2"
+  local ssh_src="${config_dir}/ssh/config"
+  local ssh_dir="${app_home}/.ssh"
+  local ssh_file="${ssh_dir}/config"
+
+  if [[ ! -f "${ssh_src}" ]]; then
+    echo "Missing shipped ssh config: ${ssh_src}" >&2
+    return 1
+  fi
+
+  [[ -f "${ssh_file}" ]] && return 0
+  mkdir -p "${ssh_dir}"
+  chmod 700 "${ssh_dir}"
+  chown --reference="${app_home}" "${ssh_dir}"
+  cp "${ssh_src}" "${ssh_file}"
+  chmod 600 "${ssh_file}"
+  chown --reference="${app_home}" "${ssh_file}"
+}
+
 ensure_work_container_app_home() {
   local app_home
   local config_dir="${2:-$(work_container_config_dir)}"
@@ -78,6 +100,7 @@ ensure_work_container_app_home() {
   mkdir -p "${app_home}/.config" "${app_home}/.cache" "${app_home}/.local/share"
   ensure_work_container_shell_rc "${app_home}" "${config_dir}"
   ensure_work_container_editor_routes "${app_home}" "${config_dir}"
+  ensure_work_container_ssh_config "${app_home}" "${config_dir}"
 }
 
 # Host IANA timezone (systemd service-start often has no TZ in the environment).
@@ -175,6 +198,30 @@ work_container_find_wayland_display() {
   return 1
 }
 
+# Live host ssh-agent / keyring socket for container git/ssh (keys stay in APP_HOME).
+# Prints path; returns 1 if none.
+work_container_host_ssh_auth_sock() {
+  local runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+  local candidate
+
+  if [[ -n "${SSH_AUTH_SOCK:-}" && -S "${SSH_AUTH_SOCK}" ]]; then
+    echo "${SSH_AUTH_SOCK}"
+    return 0
+  fi
+  for candidate in \
+    "${runtime_dir}/gcr/ssh" \
+    "${runtime_dir}/keyring/ssh" \
+    "${runtime_dir}/openssh_agent" \
+    "${runtime_dir}/ssh-agent.sock" \
+    "${runtime_dir}/ssh-agent"; do
+    if [[ -S "${candidate}" ]]; then
+      echo "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Host GUI session vars for app launches (DISPLAY, Wayland, audio, VA-API).
 # Always resolve a live Wayland socket so exec works after logout/login without
 # recreating the container (runtime dir is visible via the /run/user parent mount).
@@ -184,10 +231,12 @@ podman_append_gui_session_env() {
   local wayland="${WAYLAND_DISPLAY:-}"
   local session_bus="unix:path=${runtime_dir}/bus"
   local pulse="unix:${runtime_dir}/pulse/native"
+  local ssh_sock=""
 
   if [[ -z "${wayland}" ]] || [[ ! -S "${runtime_dir}/${wayland}" ]]; then
     wayland="$(work_container_find_wayland_display "${runtime_dir}" || true)"
   fi
+  ssh_sock="$(work_container_host_ssh_auth_sock || true)"
 
   [[ -n "${DISPLAY:-}" ]] && _env_args+=(--env "DISPLAY=${DISPLAY}")
   [[ -n "${XAUTHORITY:-}" ]] && _env_args+=(--env "XAUTHORITY=${XAUTHORITY}")
@@ -204,6 +253,7 @@ podman_append_gui_session_env() {
   elif [[ -S "${runtime_dir}/pulse/native" ]]; then
     _env_args+=(--env "PULSE_SERVER=${pulse}")
   fi
+  [[ -n "${ssh_sock}" ]] && _env_args+=(--env "SSH_AUTH_SOCK=${ssh_sock}")
   [[ -n "${PIPEWIRE_REMOTE:-}" ]] && _env_args+=(--env "PIPEWIRE_REMOTE=${PIPEWIRE_REMOTE}")
   [[ -n "${LIBVA_DRIVER_NAME:-}" ]] && _env_args+=(--env "LIBVA_DRIVER_NAME=${LIBVA_DRIVER_NAME}")
   [[ -n "${LIBVA_DRIVERS_PATH:-}" ]] && _env_args+=(--env "LIBVA_DRIVERS_PATH=${LIBVA_DRIVERS_PATH}")
@@ -258,7 +308,14 @@ work_container_exec_as_user() {
     podman_exec_stdio_args
   fi
 
-  sudo podman exec "${PODMAN_EXEC_STDIO[@]}" "${podman_args[@]}" work_container \
+  # Prefer a live host agent on every exec (systemd-started container often has none).
+  local ssh_sock=""
+  local -a ssh_env=()
+  if ssh_sock="$(work_container_host_ssh_auth_sock)"; then
+    ssh_env+=(-e "SSH_AUTH_SOCK=${ssh_sock}")
+  fi
+
+  sudo podman exec "${PODMAN_EXEC_STDIO[@]}" "${podman_args[@]}" "${ssh_env[@]}" work_container \
     setpriv --reuid "$(id -u)" --regid "$(id -g)" --groups "$(work_container_host_groups_csv)" -- \
     "${cmd[@]}"
 }

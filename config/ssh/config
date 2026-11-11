@@ -1,0 +1,5 @@
+# Seeded into APP_HOME ~/.ssh/config when that file is missing.
+# Private keys stay under APP_HOME ~/.ssh. With SSH_AUTH_SOCK forwarded from the
+# host agent/keyring, the first passphrase unlock is remembered for the session.
+Host *
+  AddKeysToAgent yes

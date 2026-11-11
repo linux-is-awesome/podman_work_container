@@ -40,7 +40,8 @@ else
 fi
 
 # Only ngrok DNS probe may use bare podman exec (read-only)
-bare_exec_count="$(grep -r 'podman exec' "${HOST_SCRIPTS_DIR}" --include='*.sh' --include='install' --include='exec-in' --include='service-*' --include='run' --include='host-podman-exec' --include='wrappers/*' 2>/dev/null | grep -v 'host-podman-exec' | grep -v 'work_container_exec_as_user' | grep -v '#' | grep -c 'podman exec' || true)"
+# GNU grep --include matches basenames only (so wrappers/* never matched work-ngrok).
+bare_exec_count="$(grep -r 'podman exec' "${HOST_SCRIPTS_DIR}" --include='*.sh' --include='install' --include='exec-in' --include='service-*' --include='run' --include='work-ngrok' 2>/dev/null | grep -v 'work_container_exec_as_user' | grep -v '#' | grep -c 'podman exec' || true)"
 ngrok_probe="$(grep -c "podman exec work_container sh -lc 'getent" "${HOST_SCRIPTS_DIR}/wrappers/work-ngrok" || true)"
 if [[ "${bare_exec_count}" -ne "${ngrok_probe}" ]]; then
   fail "unexpected bare podman exec outside ngrok getent probe (count=${bare_exec_count}, ngrok=${ngrok_probe})"

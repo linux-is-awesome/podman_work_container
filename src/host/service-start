@@ -215,6 +215,12 @@ podman_append_host_home_mounts HOME_MOUNT_ARGS "${HOST_HOME}" "${HOST_UID}"
 work_container_ensure_ufw_podman
 work_container_ensure_host_sshd || true
 
+SSH_AUTH_ARGS=()
+HOST_SSH_AUTH_SOCK="$(work_container_host_ssh_auth_sock || true)"
+if [[ -n "${HOST_SSH_AUTH_SOCK}" ]]; then
+  SSH_AUTH_ARGS+=(-e "SSH_AUTH_SOCK=${HOST_SSH_AUTH_SOCK}")
+fi
+
 "${PODMAN_BIN[@]}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
 
 echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
@@ -242,6 +248,7 @@ echo "Starting service container ${CONTAINER_NAME} from ${IMAGE_NAME}..."
   -e "DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket" \
   -e "DBUS_SESSION_BUS_ADDRESS=unix:path=${HOST_RUNTIME_DIR}/bus" \
   -e "PULSE_SERVER=unix:${HOST_RUNTIME_DIR}/pulse/native" \
+  "${SSH_AUTH_ARGS[@]}" \
   -p "127.0.0.1:${NODE_PROXY_PORT}:${NODE_PROXY_PORT}" \
   "${DISPLAY_ARGS[@]}" \
   "${IMAGE_NAME}" sleep infinity >/dev/null
