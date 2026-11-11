@@ -21,7 +21,7 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Shape
 
-- `./start` → `src/host/` or `src/dev/`. Container/service name: `work_container`.
+- `./setup` → `src/host/` or `src/dev/`. Container/service name: `work_container`.
 - Install flattens host runtime into `/usr/local/lib/work_container/src` (+ `config/`); wrappers → `/usr/local/bin`.
 - `resolve-paths`: project = `src/host/../../`; installed = `…/work_container` (sibling `config/`).
 - Container APP_HOME: `~/.containers/work_container/home` (`HOME`/`XDG_*`/`BROWSER`/`WORK_CONTAINER_HOST_HOME` set in `service-start`). Host home bind-mounted at its real path and, when that is not `/home/<user>` (e.g. Silverblue `/var/home/<user>`), also at `/home/<user>` so FHS paths work; service cwd = host home.
@@ -51,10 +51,10 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Image / tools
 
-- `./start build` uses layer cache (fast Containerfile/config tests). `./start build-fresh` runs `podman builder prune -af` then `build --no-cache` (fresh Chrome/Code/Cursor/`sf`/…). Cursor CLI (`agent`) in image under `/opt/cursor-agent`, on PATH; no host wrapper — use `work-shell`. Prefer build-fresh over `agent update` to image `/opt`.
+- `./setup build` uses layer cache (fast Containerfile/config tests). `./setup build-fresh` runs `podman builder prune -af` then `build --no-cache` (fresh Chrome/Code/Cursor/`sf`/…). Cursor CLI (`agent`) in image under `/opt/cursor-agent`, on PATH; no host wrapper — use `work-shell`. Prefer build-fresh over `agent update` to image `/opt`.
 - `mise`/`pipx` + agent CLIs (`rg`, `fd`, `jq`, …) in image; user runtimes persist in APP_HOME. No compilers / extra tool repos in image by default.
 - SF auth storm watch (`sfdx-auth-watch`): if ≥20 writes to one `~/.sfdx` org auth JSON in 30s, kill Code/Cursor extension hosts; 60s cooldown. Tunables `SFDX_AUTH_STORM_*`.
 
 ## Touch often
 
-`start`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-ufw,host-sshd,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,build-fresh,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.
+`setup`, `src/host/{install,uninstall,ensure-host-deps,service-*,run,exec-in,host-mounts,host-ufw,host-sshd,host-podman-exec,host-gtk-settings,host-session-env,host-toolchain-env,host-toolchain,app-runners,wrappers,host-open,desktop}`, `src/container/{entrypoint,vpn-updown,sfdx-auth-watch}`, `src/dev/{build,build-fresh,configure-vpn}`, `config/{vpn,proxy,shell,agent,xdg,routing}/`.

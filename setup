@@ -46,7 +46,7 @@ run_cmd() {
   "${path}" "$@"
 }
 
-# Most start commands need host Podman tooling; refuse to continue until deps are OK.
+# Most setup commands need host Podman tooling; refuse to continue until deps are OK.
 ensure_host_deps_or_exit() {
   "${HOST_SCRIPTS_DIR}/ensure-host-deps" || exit $?
 }
@@ -82,11 +82,12 @@ run_app() {
 }
 
 print_help() {
-  echo "${C_BOLD}${C_CYAN}work_container launcher${C_RESET}"
+  echo "${C_BOLD}${C_CYAN}work_container setup${C_RESET}"
   echo
   echo "${C_BOLD}Usage${C_RESET}"
-  echo "  ./start <command> [args...]"
-  echo "  ./start app <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]"
+  echo "  ./setup                  # interactive menu"
+  echo "  ./setup <command> [args...]"
+  echo "  ./setup app <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]"
   echo
   echo "${C_BOLD}Commands${C_RESET}"
   echo "  ${C_GREEN}build${C_RESET}           (cached; fast for Containerfile/config tests)"
@@ -104,12 +105,12 @@ print_help() {
   echo "  ${C_MAGENTA}app${C_RESET} <google-chrome|firefox|vscode|cursor|github-desktop|sf> [args...]"
   echo
   echo "${C_BOLD}Examples${C_RESET}"
-  echo "  ./start app google-chrome"
-  echo "  ./start app firefox"
-  echo "  ./start app vscode"
-  echo "  ./start app cursor"
-  echo "  ./start app github-desktop"
-  echo "  ./start app sf --version"
+  echo "  ./setup app google-chrome"
+  echo "  ./setup app firefox"
+  echo "  ./setup app vscode"
+  echo "  ./setup app cursor"
+  echo "  ./setup app github-desktop"
+  echo "  ./setup app sf --version"
 }
 
 pause() {
@@ -118,11 +119,16 @@ pause() {
 }
 
 draw_header() {
+  local width=46
+  local title="work_container setup"
+  local pad=$((width - ${#title} - 1))
+  (( pad < 0 )) && pad=0
+  local bar
+  bar="$(printf '═%.0s' $(seq 1 "${width}"))"
   clear
-  echo "${C_CYAN}${C_BOLD}╔══════════════════════════════════════════════════════════════╗${C_RESET}"
-  echo "${C_CYAN}${C_BOLD}║${C_RESET} ${C_BOLD}work_container control center${C_RESET}                               ${C_CYAN}${C_BOLD}║${C_RESET}"
-  echo "${C_CYAN}${C_BOLD}╚══════════════════════════════════════════════════════════════╝${C_RESET}"
-  echo "${C_YELLOW}Project:${C_RESET} ${PROJECT_DIR}"
+  printf '%s\n' "${C_CYAN}${C_BOLD}╔${bar}╗${C_RESET}"
+  printf '%s\n' "${C_CYAN}${C_BOLD}║${C_RESET} ${C_BOLD}${title}${C_RESET}$(printf '%*s' "${pad}" '')${C_CYAN}${C_BOLD}║${C_RESET}"
+  printf '%s\n' "${C_CYAN}${C_BOLD}╚${bar}╝${C_RESET}"
   echo
 }
 

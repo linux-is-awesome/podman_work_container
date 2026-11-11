@@ -15,7 +15,7 @@ if [[ -f "${CONFIG_DIR}/proxy/proxy.env" ]]; then
 fi
 
 if ! ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null)"; then
-  echo "Cannot access root podman. Run ./start install (adds sudoers rule) or authenticate with: sudo -v"
+  echo "Cannot access root podman. Run ./setup install (adds sudoers rule) or authenticate with: sudo -v"
   exit 1
 fi
 

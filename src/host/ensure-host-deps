@@ -167,7 +167,7 @@ run_install() {
 
 case "${MODE}" in
   check)
-    echo "Install with: ./start ensure-host-deps --yes"
+    echo "Install with: ./setup ensure-host-deps --yes"
     exit 1
     ;;
   yes)
@@ -180,14 +180,14 @@ case "${MODE}" in
       case "${ans}" in
         Y|y|yes|YES) run_install ;;
         *)
-          echo "Aborted. Install with: ./start ensure-host-deps --yes" >&2
+          echo "Aborted. Install with: ./setup ensure-host-deps --yes" >&2
           exit 1
           ;;
       esac
     else
       echo "Non-interactive; refusing to install. Re-run with --yes:" >&2
-      echo "  ./start ensure-host-deps --yes" >&2
-      echo "  WORK_CONTAINER_INSTALL_DEPS=yes ./start install" >&2
+      echo "  ./setup ensure-host-deps --yes" >&2
+      echo "  WORK_CONTAINER_INSTALL_DEPS=yes ./setup install" >&2
       exit 1
     fi
     ;;

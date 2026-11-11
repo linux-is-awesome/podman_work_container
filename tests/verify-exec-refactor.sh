@@ -14,7 +14,7 @@ fail() { echo "FAIL: $*"; FAIL=1; }
 
 require_container() {
   if ! sudo podman ps --format '{{.Names}}' 2>/dev/null | grep -qx 'work_container'; then
-    fail "work_container is not running (start with ./start service-start)"
+    fail "work_container is not running (start with ./setup service-start)"
     exit 1
   fi
 }
@@ -124,7 +124,7 @@ if [[ -f /usr/local/lib/work_container/src/host-podman-exec ]]; then
   if diff -q "${HOST_SCRIPTS_DIR}/host-podman-exec" /usr/local/lib/work_container/src/host-podman-exec >/dev/null 2>&1; then
     pass "installed host-podman-exec matches project"
   else
-    fail "installed host-podman-exec differs from project (re-run ./start install)"
+    fail "installed host-podman-exec differs from project (re-run ./setup install)"
   fi
 else
   echo "SKIP: runtime bundle not installed"

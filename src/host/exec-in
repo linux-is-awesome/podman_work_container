@@ -7,17 +7,17 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-paths"
 source "${SCRIPT_DIR}/host-podman-exec"
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: ./start exec-in <command> [args...]" >&2
+  echo "Usage: ./setup exec-in <command> [args...]" >&2
   exit 1
 fi
 
 if ! ps_names="$(sudo podman ps --format '{{.Names}}' 2>/dev/null)"; then
-  echo "Cannot access root podman. Run ./start install (adds sudoers rule) or authenticate with: sudo -v" >&2
+  echo "Cannot access root podman. Run ./setup install (adds sudoers rule) or authenticate with: sudo -v" >&2
   exit 1
 fi
 
 if ! grep -qx 'work_container' <<< "${ps_names}"; then
-  echo "work_container service is not running. Start it with: ./start service-start" >&2
+  echo "work_container service is not running. Start it with: ./setup service-start" >&2
   exit 1
 fi
 

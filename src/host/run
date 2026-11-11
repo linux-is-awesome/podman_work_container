@@ -39,7 +39,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 if [[ ! -f "${CONFIG_DIR}/vpn/vpn.env" ]]; then
-  echo "Missing ${CONFIG_DIR}/vpn/vpn.env. Run ./start configure-vpn first." >&2
+  echo "Missing ${CONFIG_DIR}/vpn/vpn.env. Run ./setup configure-vpn first." >&2
   exit 1
 fi
 
@@ -56,7 +56,7 @@ NODE_PROXY_PORT="${WORK_CONTAINER_NODE_PROXY_PORT:-3128}"
 
 LATEST_IMAGE="$(find_latest_image "${IMAGE_DIR}")"
 if [[ -z "${LATEST_IMAGE}" ]]; then
-  echo "No built image files found in ${IMAGE_DIR}/. Run ./start build first." >&2
+  echo "No built image files found in ${IMAGE_DIR}/. Run ./setup build first." >&2
   exit 1
 fi
 

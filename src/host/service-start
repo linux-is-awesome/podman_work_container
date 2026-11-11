@@ -112,7 +112,7 @@ ensure_host_runtime_dir() {
 }
 
 if [[ ! -f "${CONFIG_DIR}/vpn/vpn.env" ]]; then
-  echo "Missing ${CONFIG_DIR}/vpn/vpn.env. Run ./start configure-vpn first." >&2
+  echo "Missing ${CONFIG_DIR}/vpn/vpn.env. Run ./setup configure-vpn first." >&2
   exit 1
 fi
 if [[ ! -f "${CONFIG_DIR}/vpn/swanctl.conf.template" ]]; then
@@ -279,4 +279,4 @@ fi
 echo "${PROXY_STATUS_LINE}"
 echo "Host runtime status:"
 echo "${HOST_STATUS}"
-echo "Use ./start service-status to check logs/state."
+echo "Use ./setup service-status to check logs/state."
