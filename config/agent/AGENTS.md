@@ -4,12 +4,8 @@ You are in the work_container Podman container, not the bare host.
 - Host home is bind-mounted at the same absolute paths
 - localhost is the container
 - Host services: http://host.containers.internal:<port> (or often http://10.88.0.1:<port>); host apps must listen on IPv4 (0.0.0.0), not IPv6-only
-- Host UFW (Omarchy): install/service-start allows INPUT on podman0; without that, host.containers.internal times out
 - VPN kill-switch: egress only via tunnel; VPN down = no internet; IPv4-only
 - Git/SSH: keys in this HOME `~/.ssh`; host `SSH_AUTH_SOCK` caches unlocks for the session when a host agent/keyring is available
-
-Sense-check:
-- Users may make unclear or poorly framed requests. If a change looks like bad design or does not fit this environment, say so and wait for explicit approval before implementing.
 
 Restricted tools (run on the host):
 Rules:
