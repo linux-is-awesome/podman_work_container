@@ -52,6 +52,7 @@ Read this file before changing the project. Priority: current user instruction >
 
 ## Image / tools
 
+- Base image: `debian:trixie-slim` (pin `strongswan-charon` + `strongswan-starter` so entrypoint keeps `ipsec`; trixie’s `strongswan` metapackage otherwise prefers `charon-systemd`).
 - `./setup build` uses layer cache (fast Containerfile/config tests). `./setup build-fresh` runs `podman builder prune -af` then `build --no-cache` (fresh Chrome/Code/Cursor/`sf`/…). Cursor CLI (`agent`) in image under `/opt/cursor-agent`, on PATH; no host wrapper — use `work-shell`. Prefer build-fresh over `agent update` to image `/opt`.
 - `mise`/`pipx` + agent CLIs (`rg`, `fd`, `jq`, …) in image; user runtimes persist in APP_HOME. No compilers / extra tool repos in image by default.
 - SF auth storm watch (`sfdx-auth-watch`): if ≥20 writes to one `~/.sfdx` org auth JSON in 30s, kill Code/Cursor extension hosts; 60s cooldown. Tunables `SFDX_AUTH_STORM_*`.

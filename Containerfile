@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     gnupg \
     iproute2 \
+    iputils-ping \
     inotify-tools \
     iptables \
     jq \
@@ -52,6 +53,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rsync \
     sqlite3 \
     strongswan \
+    strongswan-charon \
+    strongswan-starter \
     strongswan-swanctl \
     tinyproxy \
     tree \
@@ -66,6 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zip \
     firefox-esr \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
+    && chmod u+s /usr/bin/ping \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Chrome from official repo.
