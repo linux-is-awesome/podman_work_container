@@ -1,298 +1,136 @@
-# Podman Work Container
+<p align="center">
+  <img src="https://raw.githubusercontent.com/containers/podman/main/logo/podman-logo.png" alt="Podman" width="120" />
+</p>
 
-Single Podman container (`work_container` image and service) with:
-- StrongSwan VPN client (inside the container)
-- Salesforce CLI (`sf`)
-- mise (runtime version manager; default `config/shell/bashrc` seeds APP_HOME; `mise install` stores Node/Java/etc. under `~/.containers/work_container/home`)
-- pipx (CLI Python apps into APP_HOME; image includes `python3` / `python3-venv`)
-- Google Chrome
-- Firefox ESR
-- Visual Studio Code
-- Cursor (IDE)
-- Cursor CLI (`agent`; use via `work-shell`)
-- GitHub Desktop
+<h1 align="center">Work Container</h1>
 
-The host does **not** need to be connected to VPN.  
-The container uses a kill-switch policy: if VPN is not up, container egress stays blocked. IPv4 internet traffic must match IPsec policy; IPv6 is dropped (`ip6tables` + `disable_ipv6`). TCP to the Podman bridge gateway is only for host-side dev/Chrome, not general internet egress.
-Scripts use `sudo podman` (rootful mode), required for reliable IPsec behavior.
+<p align="center">
+  <strong>Isolated Linux workstation in one Podman container</strong><br />
+  VPN kill-switch · GUI apps · Salesforce CLI · host bridges
+</p>
 
-## 1) Packages to install on host
+<p align="center">
+  <img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux" />
+  <img src="https://img.shields.io/badge/Podman-892CA0?style=flat-square&logo=podman&logoColor=white" alt="Podman" />
+  <img src="https://img.shields.io/badge/VPN-strongSwan-0A66C2?style=flat-square" alt="strongSwan" />
+  <img src="https://img.shields.io/badge/GUI-Wayland-2ECC71?style=flat-square" alt="Wayland" />
+  <img src="https://img.shields.io/badge/mode-rootful-critical?style=flat-square" alt="rootful" />
+</p>
 
-Rootful Podman (`sudo podman`) plus common container storage helpers. GUI apps use the host Wayland session (not X11/`xauth`).
+<p align="center">
+  <a href="#whats-inside">What's inside</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#host-wrappers">Host wrappers</a> ·
+  <a href="#service">Service</a>
+</p>
 
-`./start` (menu or any command except `help`) detects Debian/Ubuntu, Fedora/RHEL-family, or Arch and checks for `podman`, `newuidmap`, `slirp4netns`, and `fuse-overlayfs`. If something is missing it asks to install; otherwise it exits and does not continue.
+---
+
+## Why
+
+Corporate VPN is often required for browsers, IDEs, and CLIs — but putting the **whole host** on that VPN is noisy, sticky, and easy to get wrong.
+
+This project keeps the host off the VPN and runs the work toolchain in one Podman container instead. A kill-switch blocks container egress when the tunnel is down, so traffic does not silently fall back to your ISP. The container is on demand: bring it up for a work session, stop it when you are done.
+
+Project files stay on the host at normal paths; app settings stay in an isolated APP_HOME so host Chrome/Code profiles are not mixed with the VPN ones.
+
+Linux only (Debian/Ubuntu, Fedora/RHEL-family, Arch, Atomic/Silverblue). Rootful Podman is required for reliable IPsec.
+
+## What's inside
+
+- **Network** — strongSwan IKEv2, IPv4-only kill-switch (IPv6 dropped), tinyproxy on host `127.0.0.1:3128`
+- **Browsers** — Google Chrome, Firefox ESR (host Wayland / GPU / Pulse)
+- **Editors** — VS Code, Cursor (+ `agent` CLI via `work-shell`)
+- **Salesforce** — `sf` / `sfdx` host wrappers → container CLI
+- **Tooling** — mise, pipx, common agent CLIs (`rg`, `fd`, `jq`, …)
+- **Desktop** — `.desktop` launchers + hicolor icons under `/usr/local`
+- **Host bridges** — `host-shell`, `host-terminal`, `work-ngrok`, `work-proxy`, `mise-export` (plus host DBus / SSH agent forwarding)
+
+Images build to `work_container:latest` and `containers/work_container-*.oci`.
+
+Persistent home for container apps: `~/.containers/work_container/home`.  
+Your real host home is also bind-mounted so project paths match inside and out.
+
+## Quick start
 
 ```bash
-./start ensure-host-deps --yes    # install missing deps without prompt
-./start ensure-host-deps --check  # check only (exit 1 if missing)
+git clone https://github.com/linux-is-awesome/podman_work_container.git
+cd podman_work_container
+./setup
 ```
 
-Manual equivalents if you prefer:
+`./setup` opens an interactive menu (host deps are checked first). Typical first-time path:
+
+1. **Configure VPN** — writes `config/vpn/vpn.env` (server, credentials). Needed before the container can reach the internet.
+2. **Build image** — cached build for day-to-day changes, or **build fresh** to re-fetch Chrome/Code/Cursor/`sf` with no cache.
+3. **Install/update system integration** — systemd unit, desktop launchers, PATH wrappers (`work-shell`, `sf`, …), sudoers for rootful Podman. Does not leave the container running.
+4. **Apps** (or desktop launchers / `work-shell`) — start the on-demand service and open Chrome, Firefox, VS Code, Cursor, GitHub Desktop, or `sf`.
+
+Service start/stop/status are also in the menu when you want the tunnel without opening an app. Nothing starts at boot.
+
+## Configuration
+
+VPN, proxy, install/uninstall, and service lifecycle are all available from the `./setup` menu. Credentials live in host-side `config/vpn/vpn.env` (never baked into the image). Edit templates under `config/` and restart the service to apply.
+
+### Host → container HTTP proxy
+
+Default: `http://127.0.0.1:3128` (localhost only). Optional `config/proxy.env`:
 
 ```bash
-# Debian / Ubuntu
-sudo apt update && sudo apt install -y podman uidmap slirp4netns fuse-overlayfs
-
-# Fedora
-sudo dnf install -y podman fuse-overlayfs slirp4netns shadow-utils
-
-# Arch
-sudo pacman -S --needed podman fuse-overlayfs slirp4netns shadow
+WORK_CONTAINER_NODE_PROXY_PORT=3128
 ```
 
-`host-shell` / `host-terminal` need OpenSSH on the host. `./start ensure-host-deps` / `./start install` install the server package (`openssh-server` or `openssh`) and enable `sshd`/`ssh`. On hosts with UFW (e.g. Omarchy), install/service-start also allows INPUT on `podman0` so the container can reach `host.containers.internal` without manual `ufw` rules. See the `host-shell` section below.
+Point host apps at it with `HTTP_PROXY` / `HTTPS_PROXY`. Traffic still follows the kill-switch.
 
-## 2) Install/Update on host
+### Reach host dev servers from container Chrome
 
-Run:
+The kill-switch still allows TCP to the Podman bridge for **host-only** backends (`host.containers.internal`) — not general internet. Bind your host app to IPv4 (`0.0.0.0`), then open:
+
+`http://host.containers.internal:<port>`
+
+### Host shell from inside the container
+
+Some work needs the **host** (native binaries, host `~`) while you stay on the same project path. From a container terminal (`work-shell` or an IDE terminal inside the container):
 
 ```bash
-./start install
+host-shell            # interactive host shell at the current directory
+host-shell -c 'pwd'   # one-shot command on the host
 ```
 
-This command will:
-- build image if no build archive exists yet
-- copy latest build archive to `~/.containers` (old versions there are removed)
-- install/update desktop entries in `~/.local/share/applications` and bundled app icons into `/usr/local/share/icons/hicolor/scalable/apps` (themeable `Icon=` names; avoids breaking Adwaita by polluting `~/.local` hicolor)
-- install `sf`/`sfdx` wrapper binaries in `/usr/local/bin` to use container CLI
-- install `work-shell` at `/usr/local/bin/work-shell` (run on the host for an interactive shell in the running container)
-- install `work-ngrok` at `/usr/local/bin/work-ngrok` (run ngrok inside container for a host port)
-- install `work-proxy` at `/usr/local/bin/work-proxy` (tail proxy connection logs from container)
-- install a sudoers rule for passwordless `podman` (required for desktop launchers and `./start app ...`)
-- install/update system service `work_container.service` (on-demand start via app runner)
+### Export mise tools to the host (`mise-export`)
 
-After first install, `sf`/`sfdx` are available as system binaries. Run `work-shell` from the host for an interactive shell in the container; if it is not running, the wrapper restarts `work_container.service` first.
+**Why:** mise (Node, etc.) lives in the **container** APP_HOME. A normal host terminal does not see those tools. If you use `host-shell` as your IDE terminal, or run commands on the host at the project path, you still want `node` / `npm` / `mise` without installing the same stack twice on the host.
 
-To remove integration:
+**What it does:** run `mise-export` **inside the container** after `mise install` / `mise use`. It registers a shim under APP_HOME. Install adds a hook in the host `~/.bashrc` so both native host terminals and `host-shell` put those shims on `PATH`. Invoking a shim runs the tool **inside** `work_container` at your current directory (starts the service if needed). The host never needs its own Node install for those commands.
 
 ```bash
-./start uninstall
-```
-
-## 3) Configure VPN outside the container
-
-Run:
-
-```bash
-./start configure-vpn
-```
-
-This creates `config/vpn/vpn.env`.
-
-If needed, edit `config/vpn/vpn.env` manually later (username/password/server/options).  
-Optionally edit `config/vpn/swanctl.conf.template` for advanced changes.  
-This file is mounted from host, so no rebuild is required.
-
-Proxy settings are separate in `config/proxy.env` (optional).  
-Create it from template when needed:
-
-```bash
-cp config/proxy.env.template config/proxy.env
-```
-
-Proxy server template is in `config/proxy/tinyproxy.conf.template` (mounted from host).
-
-## 4) Build image
-
-Fast rebuild (uses Podman layer cache — good for Containerfile/config tests):
-
-```bash
-./start build
-```
-
-Fresh rebuild (prune build cache + `--no-cache` — re-fetches Chrome/Code/Cursor/`sf`/etc.):
-
-```bash
-./start build-fresh
-```
-
-Both tag `work_container:latest` and save:
-
-`containers/work_container-YYYYMMDD-HHMMSS.oci`
-
-Example:
-
-`containers/work_container-20260429-132501.oci`
-
-## 5) Run container
-
-```bash
-./start run
-```
-
-This loads and runs the newest build version found in `containers/`.
-
-Run specific build version:
-
-```bash
-./start run 20260429-132501
-```
-
-Run a specific app directly:
-
-```bash
-./start app google-chrome
-./start app firefox
-./start app vscode
-./start app cursor
-./start app sf --version
-```
-
-## 4b) Run as persistent service (recommended for host tools)
-
-Start service (latest build):
-
-```bash
-./start service-start
-```
-
-Alias command (same behavior):
-
-```bash
-./start start-service
-```
-
-If GUI apps fail after login/session changes, restart service so new display/runtime mounts apply:
-
-```bash
-./start service-stop
-./start service-start
-```
-
-Start specific build:
-
-```bash
-./start service-start 20260429-132501
-```
-
-Check status/log tail:
-
-```bash
-./start service-status
-```
-
-Stop service:
-
-```bash
-./start service-stop
-```
-
-Run tools from the running service container:
-
-```bash
-./start app sf --version
-./start app google-chrome
-./start app firefox
-./start app vscode
-./start app cursor
-```
-
-Access host-local apps from inside container apps (for example Chrome):
-
-- `localhost` inside container is not host `localhost`
-- use host bridge gateway address: `http://10.88.0.1:<port>`
-- equivalent host alias is usually available: `http://host.containers.internal:<port>`
-- bind your host app to IPv4 (for example `0.0.0.0`), not only IPv6
-
-Example:
-
-```bash
-vite --host 0.0.0.0 --port 4173
-```
-
-Then open from container Chrome:
-
-`http://10.88.0.1:4173`
-
-or:
-
-`http://host.containers.internal:4173`
-
-Run ngrok from inside container (manual, not auto-start):
-
-```bash
-work-ngrok 4173
-```
-
-This exposes host app port `4173` via container/VPN path.
-
-Set ngrok auth token for the wrapper path:
-
-```bash
-work-ngrok auth <YOUR_TOKEN>
-```
-
-`work-ngrok` uses isolated config/cache/data paths under:
-
-`~/.containers/work_container/home`
-
-Tail proxy connection logs (starts service if needed):
-
-```bash
-work-proxy
-```
-
-Service mode mounts your full host home directory as read/write at the same path,
-so container tools/apps can work with your normal files.
-
-`exec-in` stores app/tool configs in:
-
-`~/.containers/work_container/home`
-
-This keeps container app settings isolated from your normal host app configs.
-
-`work-shell` and VS Code integrated terminals use that path as `HOME`. Default `~/.bashrc` / `~/.profile` are seeded from `config/shell/bashrc` and `config/shell/profile` on first `service-start` (mise activate included). Edit the live files under `~/.containers/work_container/home/` or change the shipped templates in `config/`.
-
-### Cursor agents in the container
-
-`./start install` installs into container `HOME`:
-
-- `~/AGENTS.md` — short briefing (container vs host, host bridges)
-- `~/.cursor/rules/work-container.mdc` — Cursor `alwaysApply` rule pointing at `~/AGENTS.md`
-
-Templates live under `config/agent/`.
-
-### Host shell from inside the container (`host-shell`)
-
-Some workflows need a **host** shell (host binaries, host `~`) while you stay in the same project path. From a container terminal:
-
-```bash
-host-shell              # interactive host shell at the current directory
-host-shell -c 'pwd'     # run one command on the host at the current directory
-```
-
-`host-shell` is bind-mounted into the container at `/usr/local/bin/host-shell`. It:
-
-- generates `~/.ssh/id_ed25519` on the **host** home if no default key exists (empty passphrase)
-- authorizes that public key in `~/.ssh/authorized_keys` (passwordless `ssh` to the host)
-- opens `ssh` to `host.containers.internal` as your user (`StrictHostKeyChecking=accept-new`)
-- `cd`s to the same path you had in the container (host home is mounted at the same absolute paths)
-- sources `host-session-env` for GUI/session env only (Wayland/DBus/`XDG_*`)
-
-Requirements (normally satisfied by `./start install`): host `sshd` listening and reachable as `host.containers.internal`. With UFW active, `host-ufw` must allow INPUT on `podman0` (done automatically on service start).
-
-#### Export mise tools to the host (`mise-export`)
-
-From a **container** shell (`work-shell` or an IDE terminal in the container), after installing tools with mise:
-
-```bash
+# inside work-shell / container IDE terminal
+mise use --global node@lts
 mise-export mise
 mise-export node
 mise-export npm
+
+mise-export --list
+mise-export --remove npm
 ```
 
-Install inserts a marked hook near the top of the **host** `~/.bashrc` (with your other tool PATH, above the interactive-only `return`) that sources `host-toolchain-env`. That is the single load path: native terminals read bashrc; `host-shell -c` uses `bash -lc` → `~/.profile` → `~/.bashrc`. Shims live under APP_HOME `~/.local/share/host-toolchain/bin`. Uninstall removes the bashrc hook.
+Open a new `host-shell` (or `hash -r` in an existing one) after exporting. Then on the host side:
 
-#### Use host shell as the default in VS Code / Cursor (one project only)
+```bash
+host-shell -c 'node --version'
+host-shell -c 'npm --version'
+```
 
-In **that** project’s `.vscode/settings.json` (not user settings), so other projects keep the container bash:
+<details>
+<summary><strong>VS Code / Cursor: default terminal on host (per project)</strong></summary>
+
+In that project’s `.vscode/settings.json`:
 
 ```json
 {
   "terminal.integrated.profiles.linux": {
-    "Host": {
-      "path": "host-shell"
-    }
+    "Host": { "path": "host-shell" }
   },
   "terminal.integrated.defaultProfile.linux": "Host",
   "terminal.integrated.automationProfile.linux": {
@@ -301,144 +139,93 @@ In **that** project’s `.vscode/settings.json` (not user settings), so other pr
 }
 ```
 
-- `defaultProfile` — new integrated terminals
-- `automationProfile` — tasks / automation terminals (needed so tasks use the host without editing each task)
+</details>
 
-Open the folder in Cursor/VS Code **inside the work container** (e.g. Cursor Work). New terminals and shell tasks then run on the host at the workspace path. Omit these settings in other projects to keep container `bash`.
+<details>
+<summary><strong>GitHub Desktop → Custom Editor router</strong></summary>
 
-### GitHub Desktop → Cursor or VS Code (`work-editor-open`)
+Set **Custom Editor** to `/usr/local/bin/work-editor-open` with argument `%TARGET_PATH%`.
 
-GitHub Desktop has one global external editor. Use **Custom Editor** pointing at `work-editor-open` (host-open bin → `/usr/local/bin/work-editor-open` in the container — not a host wrapper like `work-shell`). Built-in “Visual Studio Code” is not enough for routing (Desktop calls fixed paths such as `/usr/share/code/bin/code`).
+Routes (longest prefix wins) live in container APP_HOME  
+`~/.config/work-editor-routing.conf` (seeded from `config/routing/`).
 
-**Decision order**
+</details>
 
-1. Running Cursor/VS Code that already has this path (or a parent folder) open — from IDE `storage.json` + process alive; longest match wins  
-2. Longest matching prefix in the routes file  
-3. Otherwise VS Code
+<details>
+<summary><strong>SSH / git</strong></summary>
 
-**Routes file** (container APP_HOME; seeded from `config/routing/work-editor-routing.conf` if missing):
+Keys live under APP_HOME `~/.ssh`. The host `SSH_AUTH_SOCK` is forwarded so unlocked keys cache in the host agent for the desktop session. A seeded `~/.ssh/config` sets `AddKeysToAgent yes` when that file is missing.
+</details>
 
-Inside the container: `~/.config/work-editor-routing.conf`  
-(`HOME` / `XDG_CONFIG_HOME` → APP_HOME under `~/.containers/work_container/home` on the host disk — not the host user’s `~/.config`.)
+## Host wrappers
 
-```text
-# Longest matching prefix wins. ~ = host home (WORK_CONTAINER_HOST_HOME).
+`./setup` install puts these on the host `PATH` (`/usr/local/bin`). If the container is stopped, they start `work_container.service` first, then run inside it.
 
-[code]
-~/Projects/Linux/foo
-
-[cursor]
-~/Projects/Linux
-```
-
-**Configure GitHub Desktop** (app running in the work container):
-
-1. **File → Options** (Linux) / **GitHub Desktop → Settings** (macOS) → **Integrations**
-2. **External Editor** → **Configure Custom Editor**
-3. **Application** / Choose: `/usr/local/bin/work-editor-open`
-4. **Arguments:** `%TARGET_PATH%`
-5. Save
-
-Then **Repository → Open in default editor** (or open a changed file) goes through the router. The router `exec`s `/usr/bin/code` or `/usr/bin/cursor` (existing app-runners).
-
-## 5) Update VPN settings without rebuild
-
-Edit `config/vpn/vpn.env` and/or `config/vpn/swanctl.conf.template`, then restart container:
+**`work-shell`** — interactive shell in the container at your current directory (falls back to container home). Pass a command to run non-interactively:
 
 ```bash
-./start run
+work-shell
+work-shell sf org list
+work-shell agent --help
 ```
 
-No image rebuild needed for VPN config changes.
-
-## 5b) Route Node.js API calls via container VPN
-
-The container starts a local HTTP CONNECT proxy after VPN is up.
-
-Default host endpoint:
-
-`http://127.0.0.1:3128`
-
-Configure proxy port for the container in `config/proxy.env`:
+**`sf` / `sfdx`** — same Salesforce CLI as inside the container, from any host directory that exists in the container:
 
 ```bash
-WORK_CONTAINER_NODE_PROXY_PORT=3128
+sf --version
+sf org list
 ```
 
-Then restart the container service:
+**`work-ngrok`** — expose a **host** port through the container VPN path:
 
 ```bash
-./start service-stop
-./start service-start
+work-ngrok auth <YOUR_TOKEN>
+work-ngrok 4173
 ```
 
-Set proxy values in your Node app `.env` file:
+**`work-proxy`** — stream tinyproxy connection logs (starts the service if needed):
 
 ```bash
-HTTP_PROXY=http://127.0.0.1:3128
-HTTPS_PROXY=http://127.0.0.1:3128
-NO_PROXY=localhost,127.0.0.1
+work-proxy
 ```
 
-Then start your Node app normally from host.
+**`work-container-app`** — used by desktop launchers (Chrome Work, Cursor Work, …). Prefer the app menu or `work-shell` for day-to-day use.
 
-Notes:
-- proxy traffic is still subject to container VPN kill-switch rules
-- proxy listens on localhost only (`127.0.0.1`) on host
-- if VPN is not up, proxy is unavailable until the watchdog brings the tunnel back
-- if `config/proxy.env` is absent, default port `3128` is used
+Inside the container (IDE terminal / `work-shell`), host bridges are separate: `host-shell`, `host-terminal`, `mise-export`, `work-editor-open`.
 
-How to check your Node app is using the proxy:
-- confirm proxy listener is up on host:
-  - `ss -ltnp | rg ':3128'`
-- inspect proxy connection logs on host:
-  - `sudo podman logs -f work_container 2>&1 | grep -Ei 'tinyproxy|connect|request|opensock|upstream|client|closed connection'`
-- run app with debug output from Node HTTP stack:
-  - `NODE_DEBUG=http,https <your start command>`
-  - look for connection attempts to `127.0.0.1:3128`
-- verify requests use VPN egress IP:
-  - from your app, call `https://ifconfig.me/ip`
-  - compare with `sudo podman logs work_container | rg "Public egress IP"`
-  - quick host one-liner through proxy: `curl -fsS --max-time 15 --proxy "http://127.0.0.1:3128" https://ifconfig.me/ip`
+## Service
 
-## 6) Update packages after image is already built
+The container is **not** an always-on daemon. Install only registers systemd unit `work_container.service` — it is **not** enabled at boot and does not run until something starts it.
 
-Use a full no-cache rebuild so package/app versions stay reproducible:
+It starts when you:
+
+- open a desktop app (Chrome Work, Cursor Work, …),
+- run a host wrapper (`work-shell`, `sf`, …), or
+- start it yourself from `./setup` / `systemctl`.
+
+When you are done, stop it to free resources and drop the VPN tunnel:
 
 ```bash
-./start build-fresh
+./setup service-stop
+# or
+sudo systemctl stop work_container.service
 ```
 
-## 7) Portable single-file image
-
-Save:
+Check whether it is running (egress IP, proxy, recent logs):
 
 ```bash
-podman save --format oci-archive -o work_container.oci work_container:latest
+./setup service-status
+# or
+sudo systemctl status work_container.service
 ```
 
-Load on a fresh OS:
+Start or restart manually when you want the tunnel/apps without launching a wrapper first:
 
 ```bash
-podman load -i work_container.oci
+./setup service-start
+./setup service-stop && ./setup service-start
+# or
+sudo systemctl restart work_container.service
 ```
 
-Your scripts already keep portable archives at:
-
-`containers/work_container-*.oci`
-
-## Notes
-
-- The current setup is designed for Linux hosts.
-- Scripts run with rootful Podman (`sudo`) and `run` uses an isolated bridge network.
-- `service-start` mounts `${HOME}` read/write into the container at the same path.
-- `service-start` also mounts host display/runtime resources, `/dev/dri`, `/dev/snd`, and DBus socket for GUI/GPU/audio integration.
-- `service-start` and `run` mount host timezone files (`/etc/localtime`, `/etc/timezone`) and pass `TZ` so container local time matches host.
-- `service-start` runs with `apparmor=unconfined` to allow DBus access from container apps.
-- VPN credentials are stored in `config/vpn/vpn.env` on host, not baked into image.
-- VPN DNS is applied automatically from the gateway (`src/container/vpn-updown` on CHILD_SA up); Podman-injected host LAN DNS is not used for tunnel traffic.
-- `Public egress IP` in logs is a DNS-dependent connectivity check, not a kill-switch allowlist.
-- If VPN or DNS is not ready at startup, the container keeps running and the entrypoint watchdog retries (same behavior after a later drop).
-- Browsers can look “stuck” if apps try **IPv6** first while the tunnel is **IPv4-only**; the image disables IPv6 in the container and clamps TCP MSS for IPsec. Some sites may still be slower than on host VPN due to corporate gateway limits.
-- Use `./start` as the single entry point; it can run build/run/service/exec-in commands.
-- `./start` with no args opens an interactive selection menu.
+Restart after VPN config changes so the container reloads `config/vpn/`.
