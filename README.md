@@ -115,6 +115,17 @@ mise-export --list
 mise-export --remove npm
 ```
 
+**PyPI CLI apps** (same export path): mise installs them via the `pypi:` backend (pipx under the hood). Bare names are often not in mise’s registry — prefix with `pypi:`:
+
+```bash
+# inside work-shell / container IDE terminal
+mise use -g pypi:<package>    # e.g. pypi:shexli → installs the shexli CLI
+mise-export <command>         # usually the package’s console script name
+
+# host / host-shell
+host-shell -c '<command> --help'
+```
+
 Open a new `host-shell` (or `hash -r` in an existing one) after exporting. Then on the host side:
 
 ```bash
