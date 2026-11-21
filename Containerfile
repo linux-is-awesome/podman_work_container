@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     file \
     gettext-base \
     git \
+    gh \
     gnupg \
     iproute2 \
     iputils-ping \
